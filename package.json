@@ -12,13 +12,24 @@
     "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
     "start:backend": "cd backend && npm start",
     "start:frontend": "cd frontend && npm run preview",
-    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "build:launcher": "pkg start.js --targets node18-win-x64 --output start.exe"
   },
   "keywords": ["logistics", "hospital", "laboratory"],
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "scripts": [
+      "start.js"
+    ],
+    "targets": [
+      "node18-win-x64"
+    ],
+    "outputPath": "start.exe"
   }
 }
 

@@ -236,6 +236,12 @@ router.put('/:id', async (req: AuthRequest, res) => {
 
       const currentTransaction = currentResult.rows[0];
 
+      // For User role, check if they own this transaction
+      if (req.user!.role === 'User' && currentTransaction.user_id !== req.user!.id) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ error: 'You can only edit your own transactions' });
+      }
+
       // Get current lot stock
       const lotResult = await client.query(
         'SELECT stock FROM lots WHERE id = $1',

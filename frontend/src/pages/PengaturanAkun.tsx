@@ -25,7 +25,11 @@ export default function PengaturanAkun() {
   const fetchUsers = async () => {
     try {
       const res = await api.get('/users');
-      setUsers(res.data);
+      // Urutkan berdasarkan username secara alfabetis
+      const sortedUsers = [...res.data].sort((a, b) => 
+        a.username.localeCompare(b.username)
+      );
+      setUsers(sortedUsers);
     } catch (error) {
       console.error('Error fetching users:', error);
     } finally {

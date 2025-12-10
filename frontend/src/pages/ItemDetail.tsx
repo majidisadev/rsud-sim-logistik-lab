@@ -332,7 +332,7 @@ export default function ItemDetail() {
       </div>
 
       {/* Lots Section */}
-      {user?.role === 'Admin' && (
+      {(user?.role === 'Admin' || user?.role === 'PJ Gudang' || user?.role === 'User') && (
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Nomor Lot</h2>

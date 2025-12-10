@@ -238,24 +238,28 @@ export default function BarangMasuk() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex space-x-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedTransaction(tx);
-                            setForm({
-                              item_id: tx.item_id.toString(),
-                              lot_id: tx.lot_id.toString(),
-                              lot_number: "",
-                              expiration_date: "",
-                              quantity: tx.quantity.toString(),
-                              notes: tx.notes || "",
-                            });
-                            setShowEditModal(true);
-                          }}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
+                        {/* Show edit button only if user is Admin/PJ Gudang OR if user is User and owns the transaction */}
+                        {((user?.role === "Admin" || user?.role === "PJ Gudang") ||
+                          (user?.role === "User" && tx.user_id === user?.id)) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              setSelectedTransaction(tx);
+                              setForm({
+                                item_id: tx.item_id.toString(),
+                                lot_id: tx.lot_id.toString(),
+                                lot_number: "",
+                                expiration_date: "",
+                                quantity: tx.quantity.toString(),
+                                notes: tx.notes || "",
+                              });
+                              setShowEditModal(true);
+                            }}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        )}
                         {(user?.role === "Admin" ||
                           user?.role === "PJ Gudang") && (
                           <Button

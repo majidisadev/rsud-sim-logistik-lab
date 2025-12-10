@@ -423,8 +423,8 @@ router.get('/:id/lots', async (req, res) => {
   }
 });
 
-// Create lot for item (Admin only)
-router.post('/:id/lots', requireRole('Admin'), async (req, res) => {
+// Create lot for item (Admin, PJ Gudang, User)
+router.post('/:id/lots', requireRole('Admin', 'PJ Gudang', 'User'), async (req, res) => {
   try {
     const { id } = req.params;
     const { lot_number, expiration_date, stock } = req.body;
@@ -457,8 +457,8 @@ router.post('/:id/lots', requireRole('Admin'), async (req, res) => {
   }
 });
 
-// Update lot (Admin only)
-router.put('/:id/lots/:lotId', requireRole('Admin'), async (req, res) => {
+// Update lot (Admin, PJ Gudang, User)
+router.put('/:id/lots/:lotId', requireRole('Admin', 'PJ Gudang', 'User'), async (req, res) => {
   try {
     const { id, lotId } = req.params;
     const { lot_number, expiration_date } = req.body;
@@ -510,8 +510,8 @@ router.put('/:id/lots/:lotId', requireRole('Admin'), async (req, res) => {
   }
 });
 
-// Delete lot (Admin only)
-router.delete('/:id/lots/:lotId', requireRole('Admin'), async (req, res) => {
+// Delete lot (Admin, PJ Gudang, User)
+router.delete('/:id/lots/:lotId', requireRole('Admin', 'PJ Gudang', 'User'), async (req, res) => {
   try {
     const { id, lotId } = req.params;
 
