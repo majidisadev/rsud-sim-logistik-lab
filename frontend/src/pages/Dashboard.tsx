@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../lib/api";
-import { AlertTriangle, Package, TrendingDown } from "lucide-react";
+import { AlertTriangle, TrendingDown } from "lucide-react";
 import {
   PieChart,
   Pie,
@@ -60,9 +60,11 @@ export default function Dashboard() {
 
       // Format daily stats for pie chart
       const dailyDataArray = Array.isArray(dailyRes.data) ? dailyRes.data : [];
-      const masukCount = dailyDataArray.find((d: any) => d.type === "Masuk")?.count || 0;
-      const keluarCount = dailyDataArray.find((d: any) => d.type === "Keluar")?.count || 0;
-      
+      const masukCount =
+        dailyDataArray.find((d: any) => d.type === "Masuk")?.count || 0;
+      const keluarCount =
+        dailyDataArray.find((d: any) => d.type === "Keluar")?.count || 0;
+
       const dailyData = [
         {
           name: "Masuk",
@@ -73,8 +75,8 @@ export default function Dashboard() {
           value: Number(keluarCount) || 0,
         },
       ];
-      
-      console.log('Daily Stats Data:', dailyData);
+
+      console.log("Daily Stats Data:", dailyData);
       setDailyStats(dailyData);
 
       // Format monthly stats
@@ -132,8 +134,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Welcome Section */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+      <div className="p-6 bg-white rounded-lg shadow">
+        <h2 className="mb-2 text-2xl font-bold text-gray-900">
           Selamat Datang di SIM Logistik Lab!
         </h2>
         <p className="text-gray-600">
@@ -145,17 +147,17 @@ export default function Dashboard() {
       </div>
 
       {/* Monitoring Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <div
           onClick={() => navigate("/barang?expired=true")}
-          className="bg-red-50 border-2 border-red-200 rounded-lg p-6 cursor-pointer hover:bg-red-100 transition-colors"
+          className="p-6 transition-colors border-2 border-red-200 rounded-lg cursor-pointer bg-red-50 hover:bg-red-100"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-red-600 font-medium">
+              <p className="text-sm font-medium text-red-600">
                 Barang Kadaluarsa
               </p>
-              <p className="text-3xl font-bold text-red-700 mt-2">
+              <p className="mt-2 text-3xl font-bold text-red-700">
                 {stats.expired}
               </p>
             </div>
@@ -165,14 +167,14 @@ export default function Dashboard() {
 
         <div
           onClick={() => navigate("/barang?soon_expired=true")}
-          className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 cursor-pointer hover:bg-yellow-100 transition-colors"
+          className="p-6 transition-colors border-2 border-yellow-200 rounded-lg cursor-pointer bg-yellow-50 hover:bg-yellow-100"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-yellow-600 font-medium">
+              <p className="text-sm font-medium text-yellow-600">
                 Segera Kadaluarsa
               </p>
-              <p className="text-3xl font-bold text-yellow-700 mt-2">
+              <p className="mt-2 text-3xl font-bold text-yellow-700">
                 {stats.soonExpired}
               </p>
             </div>
@@ -182,29 +184,29 @@ export default function Dashboard() {
 
         <div
           onClick={() => navigate("/barang?out_of_stock=true")}
-          className="bg-red-50 border-2 border-red-200 rounded-lg p-6 cursor-pointer hover:bg-red-100 transition-colors"
+          className="p-6 transition-colors border-2 border-red-200 rounded-lg cursor-pointer bg-red-50 hover:bg-red-100"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-red-600 font-medium">Stock Habis</p>
-              <p className="text-3xl font-bold text-red-700 mt-2">
+              <p className="text-sm font-medium text-red-600">Stock Habis</p>
+              <p className="mt-2 text-3xl font-bold text-red-700">
                 {stats.outOfStock}
               </p>
             </div>
-            <Package className="w-12 h-12 text-red-500" />
+            <TrendingDown className="w-12 h-12 text-red-500" />
           </div>
         </div>
 
         <div
           onClick={() => navigate("/barang?low_stock=true")}
-          className="bg-yellow-50 border-2 border-yellow-200 rounded-lg p-6 cursor-pointer hover:bg-yellow-100 transition-colors"
+          className="p-6 transition-colors border-2 border-yellow-200 rounded-lg cursor-pointer bg-yellow-50 hover:bg-yellow-100"
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-yellow-600 font-medium">
+              <p className="text-sm font-medium text-yellow-600">
                 Stock Segera Habis
               </p>
-              <p className="text-3xl font-bold text-yellow-700 mt-2">
+              <p className="mt-2 text-3xl font-bold text-yellow-700">
                 {stats.lowStock}
               </p>
             </div>
@@ -214,21 +216,28 @@ export default function Dashboard() {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold mb-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="p-6 bg-white rounded-lg shadow">
+          <h3 className="mb-4 text-lg font-semibold">
             Transaksi Harian (Masuk/Keluar)
           </h3>
-          <div style={{ width: '100%', height: '300px', minHeight: '300px', position: 'relative' }}>
+          <div
+            style={{
+              width: "100%",
+              height: "300px",
+              minHeight: "300px",
+              position: "relative",
+            }}
+          >
             {dailyStats.length > 0 && dailyStats.some((d) => d.value > 0) ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={dailyStats.filter(d => d.value > 0)}
+                    data={dailyStats.filter((d) => d.value > 0)}
                     cx="50%"
                     cy="45%"
                     labelLine={true}
-                    label={({ name, percent, value }) => 
+                    label={({ name, percent, value }) =>
                       `${name}: ${value}\n(${(percent * 100).toFixed(0)}%)`
                     }
                     outerRadius={90}
@@ -238,20 +247,22 @@ export default function Dashboard() {
                     strokeWidth={3}
                     isAnimationActive={true}
                   >
-                    {dailyStats.filter(d => d.value > 0).map((_, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={COLORS[index % COLORS.length]}
-                        stroke="#ffffff"
-                        strokeWidth={2}
-                      />
-                    ))}
+                    {dailyStats
+                      .filter((d) => d.value > 0)
+                      .map((_, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={COLORS[index % COLORS.length]}
+                          stroke="#ffffff"
+                          strokeWidth={2}
+                        />
+                      ))}
                   </Pie>
-                  <Tooltip 
-                    formatter={(value: number) => [value, 'Jumlah Transaksi']}
+                  <Tooltip
+                    formatter={(value: number) => [value, "Jumlah Transaksi"]}
                   />
-                  <Legend 
-                    verticalAlign="bottom" 
+                  <Legend
+                    verticalAlign="bottom"
                     height={36}
                     iconType="circle"
                   />
@@ -265,8 +276,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold mb-4">
+        <div className="p-6 bg-white rounded-lg shadow">
+          <h3 className="mb-4 text-lg font-semibold">
             Transaksi Bulanan (Jan-Des)
           </h3>
           <ResponsiveContainer width="100%" height={300}>
@@ -284,21 +295,21 @@ export default function Dashboard() {
       </div>
 
       {/* Recent Transactions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold mb-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="p-6 bg-white rounded-lg shadow">
+          <h3 className="mb-4 text-lg font-semibold">
             Transaksi Masuk Terakhir
           </h3>
           <div className="space-y-3">
             {recentIn.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">
+              <p className="py-4 text-center text-gray-500">
                 Tidak ada transaksi
               </p>
             ) : (
               recentIn.map((tx) => (
                 <div
                   key={tx.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                  className="flex items-center justify-between p-3 rounded-lg bg-gray-50"
                 >
                   <div>
                     <p className="font-medium">{tx.item_name}</p>
@@ -316,20 +327,20 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <h3 className="text-lg font-semibold mb-4">
+        <div className="p-6 bg-white rounded-lg shadow">
+          <h3 className="mb-4 text-lg font-semibold">
             Transaksi Keluar Terakhir
           </h3>
           <div className="space-y-3">
             {recentOut.length === 0 ? (
-              <p className="text-gray-500 text-center py-4">
+              <p className="py-4 text-center text-gray-500">
                 Tidak ada transaksi
               </p>
             ) : (
               recentOut.map((tx) => (
                 <div
                   key={tx.id}
-                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                  className="flex items-center justify-between p-3 rounded-lg bg-gray-50"
                 >
                   <div>
                     <p className="font-medium">{tx.item_name}</p>
