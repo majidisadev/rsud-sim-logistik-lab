@@ -16,7 +16,7 @@ Sistem informasi manajemen logistik laboratorium rumah sakit berbasis web menggu
 ## Express Install
 
 1. Buka install-all.bat
-2. Ganti `.env.example` menjadi `.env` pada folder backend dan frontend. Atur sesuaikan database.
+2. Ganti `.env.example` menjadi `.env` pada folder backend dan frontend. Atur dengan menyesuaikan database.
 3. Siapkan database PostgreSQL. Buat database baru dengan nama sesuai dengan `DB_NAME` di `backend/.env` (default: `sim_logistik_lab`)
 4. Buka setup-database.bat
 5. Buka build.bat
