@@ -140,9 +140,9 @@ export default function Dashboard() {
         </h2>
         <p className="text-gray-600">
           Sistem Informasi Manajemen Logistik Laboratorium ini menggantikan
-          pencatatan barang di kertas dengan input yang lebih cepat, mampu
-          memantau tingkat stock dan tanggal kadaluarsa secara real time, serta
-          dilengkapi peringatan ketika barang perlu dipesan ulang.
+          pencatatan barang di kertas dengan input cepat, mampu memantau tingkat
+          stock dan tanggal kadaluarsa secara real time, serta dilengkapi
+          peringatan ketika barang perlu dipesan ulang.
         </p>
       </div>
 

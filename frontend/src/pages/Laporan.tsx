@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { Download } from 'lucide-react';
+import { Download, Search, Eye } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import * as XLSX from 'xlsx';
@@ -8,15 +9,29 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 export default function Laporan() {
+  const navigate = useNavigate();
   const [reports, setReports] = useState<any[]>([]);
+  const [filteredReports, setFilteredReports] = useState<any[]>([]);
   const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [year, setYear] = useState(new Date().getFullYear().toString());
   const [month, setMonth] = useState((new Date().getMonth() + 1).toString());
   const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchReports();
   }, [period, year, month]);
+
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setFilteredReports(reports);
+    } else {
+      const filtered = reports.filter((report) =>
+        report.item_name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setFilteredReports(filtered);
+    }
+  }, [searchTerm, reports]);
 
   const fetchReports = async () => {
     setLoading(true);
@@ -26,6 +41,7 @@ export default function Laporan() {
 
       const res = await api.get('/reports', { params });
       setReports(res.data);
+      setFilteredReports(res.data);
     } catch (error) {
       console.error('Error fetching reports:', error);
     } finally {
@@ -34,7 +50,7 @@ export default function Laporan() {
   };
 
   const exportToExcel = () => {
-    const data = reports.map((r) => ({
+    const data = filteredReports.map((r) => ({
       Barang: r.item_name,
       Satuan: r.unit || '-',
       'Jumlah Masuk': r.total_masuk,
@@ -55,7 +71,7 @@ export default function Laporan() {
       15
     );
 
-    const tableData = reports.map((r) => [
+    const tableData = filteredReports.map((r) => [
       r.item_name,
       r.unit || '-',
       r.total_masuk.toString(),
@@ -88,6 +104,19 @@ export default function Laporan() {
       </div>
 
       <div className="bg-white rounded-lg shadow p-4 space-y-4">
+        <div>
+          <label className="block text-sm font-medium mb-2">Cari Barang</label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Masukkan nama barang..."
+              className="pl-10"
+            />
+          </div>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium mb-2">Periode</label>
@@ -146,28 +175,41 @@ export default function Laporan() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Jumlah Keluar
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                  Aksi
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-4 text-center">
+                  <td colSpan={5} className="px-6 py-4 text-center">
                     Loading...
                   </td>
                 </tr>
-              ) : reports.length === 0 ? (
+              ) : filteredReports.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-4 text-center text-gray-500">
-                    Tidak ada data
+                  <td colSpan={5} className="px-6 py-4 text-center text-gray-500">
+                    {searchTerm ? 'Tidak ada data yang sesuai dengan pencarian' : 'Tidak ada data'}
                   </td>
                 </tr>
               ) : (
-                reports.map((report) => (
+                filteredReports.map((report) => (
                   <tr key={report.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">{report.item_name}</td>
                     <td className="px-6 py-4 whitespace-nowrap">{report.unit || '-'}</td>
                     <td className="px-6 py-4 whitespace-nowrap">{report.total_masuk}</td>
                     <td className="px-6 py-4 whitespace-nowrap">{report.total_keluar}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate(`/barang/${report.id}`)}
+                      >
+                        <Eye className="w-4 h-4 mr-2" />
+                        View Detail
+                      </Button>
+                    </td>
                   </tr>
                 ))
               )}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import api from "../lib/api";
 import { Plus, Edit, Trash2 } from "lucide-react";
 import Button from "../components/ui/Button";
@@ -8,6 +9,7 @@ import { useAuth } from "../contexts/AuthContext";
 
 export default function BarangMasuk() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,11 +29,19 @@ export default function BarangMasuk() {
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [selectedItemDetails, setSelectedItemDetails] = useState<any>(null);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [allTransactions, setAllTransactions] = useState<any[]>([]);
 
   useEffect(() => {
     fetchTransactions();
     fetchItems();
+    setCurrentPage(1);
   }, [filterItem, filterStartDate, filterEndDate]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage]);
 
   useEffect(() => {
     if (form.item_id) {
@@ -47,7 +57,7 @@ export default function BarangMasuk() {
       if (filterEndDate) params.end_date = filterEndDate;
 
       const res = await api.get("/transactions", { params });
-      setTransactions(res.data);
+      setAllTransactions(res.data);
     } catch (error) {
       console.error("Error fetching transactions:", error);
     } finally {
@@ -125,6 +135,12 @@ export default function BarangMasuk() {
 
   const itemLots = selectedItemDetails?.lots || [];
 
+  // Calculate pagination
+  const totalPages = Math.ceil(allTransactions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedTransactions = allTransactions.slice(startIndex, endIndex);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -136,14 +152,14 @@ export default function BarangMasuk() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="p-4 space-y-4 bg-white rounded-lg shadow">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <div>
-            <label className="block text-sm font-medium mb-2">Barang</label>
+            <label className="block mb-2 text-sm font-medium">Barang</label>
             <select
               value={filterItem}
               onChange={(e) => setFilterItem(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg p-2"
+              className="w-full p-2 border border-gray-300 rounded-lg"
             >
               <option value="">Semua</option>
               {items.map((item) => (
@@ -154,7 +170,7 @@ export default function BarangMasuk() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="block mb-2 text-sm font-medium">
               Tanggal Mulai
             </label>
             <Input
@@ -164,7 +180,7 @@ export default function BarangMasuk() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="block mb-2 text-sm font-medium">
               Tanggal Akhir
             </label>
             <Input
@@ -173,31 +189,49 @@ export default function BarangMasuk() {
               onChange={(e) => setFilterEndDate(e.target.value)}
             />
           </div>
+          <div>
+            <label className="block mb-2 text-sm font-medium">
+              Items per Page
+            </label>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="w-full p-2 border border-gray-300 rounded-lg"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="overflow-hidden bg-white rounded-lg shadow">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-xs font-medium text-left text-gray-500 uppercase">
                   Waktu
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-xs font-medium text-left text-gray-500 uppercase">
                   Barang
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-xs font-medium text-left text-gray-500 uppercase">
                   Jumlah Masuk
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-xs font-medium text-left text-gray-500 uppercase">
                   Penerima
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-xs font-medium text-left text-gray-500 uppercase">
                   Keterangan
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                <th className="px-6 py-3 text-xs font-medium text-left text-gray-500 uppercase">
                   Aksi
                 </th>
               </tr>
@@ -209,7 +243,7 @@ export default function BarangMasuk() {
                     Loading...
                   </td>
                 </tr>
-              ) : transactions.length === 0 ? (
+              ) : paginatedTransactions.length === 0 ? (
                 <tr>
                   <td
                     colSpan={6}
@@ -219,13 +253,18 @@ export default function BarangMasuk() {
                   </td>
                 </tr>
               ) : (
-                transactions.map((tx) => (
+                paginatedTransactions.map((tx) => (
                   <tr key={tx.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       {new Date(tx.created_at).toLocaleString("id-ID")}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {tx.item_name}
+                      <button
+                        onClick={() => navigate(`/barang/${tx.item_id}`)}
+                        className="text-black hover:underline cursor-pointer"
+                      >
+                        {tx.item_name}
+                      </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {tx.quantity}
@@ -239,8 +278,10 @@ export default function BarangMasuk() {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex space-x-2">
                         {/* Show edit button only if user is Admin/PJ Gudang OR if user is User and owns the transaction */}
-                        {((user?.role === "Admin" || user?.role === "PJ Gudang") ||
-                          (user?.role === "User" && tx.user_id === user?.id)) && (
+                        {(user?.role === "Admin" ||
+                          user?.role === "PJ Gudang" ||
+                          (user?.role === "User" &&
+                            tx.user_id === user?.id)) && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -278,6 +319,35 @@ export default function BarangMasuk() {
             </tbody>
           </table>
         </div>
+        {/* Pagination Controls */}
+        {allTransactions.length > 0 && (
+          <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              Menampilkan {startIndex + 1} sampai {Math.min(endIndex, allTransactions.length)} dari {allTransactions.length} data
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                Sebelumnya
+              </Button>
+              <span className="text-sm text-gray-700">
+                Halaman {currentPage} dari {totalPages}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Selanjutnya
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add Modal */}
@@ -289,7 +359,7 @@ export default function BarangMasuk() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-2">Barang</label>
+            <label className="block mb-2 text-sm font-medium">Barang</label>
             <Input
               type="text"
               placeholder="Ketik nama barang..."
@@ -303,7 +373,7 @@ export default function BarangMasuk() {
               }}
             />
             {itemSearch && (
-              <div className="mt-2 border border-gray-200 rounded-lg max-h-40 overflow-y-auto">
+              <div className="mt-2 overflow-y-auto border border-gray-200 rounded-lg max-h-40">
                 {items
                   .filter((i) =>
                     i.name.toLowerCase().includes(itemSearch.toLowerCase())
@@ -315,7 +385,7 @@ export default function BarangMasuk() {
                         setForm({ ...form, item_id: item.id.toString() });
                         setItemSearch(item.name);
                       }}
-                      className="p-2 hover:bg-gray-100 cursor-pointer"
+                      className="p-2 cursor-pointer hover:bg-gray-100"
                     >
                       {item.name}
                     </div>
@@ -326,7 +396,7 @@ export default function BarangMasuk() {
           {form.item_id && (
             <>
               <div>
-                <label className="block text-sm font-medium mb-2">Lot</label>
+                <label className="block mb-2 text-sm font-medium">Lot</label>
                 <select
                   value={form.lot_id}
                   onChange={(e) => {
@@ -336,7 +406,7 @@ export default function BarangMasuk() {
                       setForm({ ...form, lot_id: e.target.value });
                     }
                   }}
-                  className="w-full border border-gray-300 rounded-lg p-2"
+                  className="w-full p-2 border border-gray-300 rounded-lg"
                 >
                   <option value="">Pilih Lot</option>
                   <option value="new">+Buat lot baru</option>
@@ -355,7 +425,7 @@ export default function BarangMasuk() {
               {(!form.lot_id || form.lot_id === "new") && (
                 <>
                   <div>
-                    <label className="block text-sm font-medium mb-2">
+                    <label className="block mb-2 text-sm font-medium">
                       Nomor Lot
                     </label>
                     <Input
@@ -367,7 +437,7 @@ export default function BarangMasuk() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2">
+                    <label className="block mb-2 text-sm font-medium">
                       Tanggal Expiration
                     </label>
                     <Input
@@ -383,7 +453,7 @@ export default function BarangMasuk() {
             </>
           )}
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="block mb-2 text-sm font-medium">
               Jumlah Masuk
             </label>
             <Input
@@ -395,8 +465,8 @@ export default function BarangMasuk() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">
-              Keterangan (max 25)
+            <label className="block mb-2 text-sm font-medium">
+              Keterangan (max 25 karakter)
             </label>
             <Input
               value={form.notes}
@@ -423,7 +493,7 @@ export default function BarangMasuk() {
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label className="block mb-2 text-sm font-medium">
               Jumlah Masuk
             </label>
             <Input
@@ -435,8 +505,8 @@ export default function BarangMasuk() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">
-              Keterangan (max 25)
+            <label className="block mb-2 text-sm font-medium">
+              Keterangan (max 25 karakter)
             </label>
             <Input
               value={form.notes}
