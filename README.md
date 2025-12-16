@@ -13,6 +13,14 @@ Sistem informasi manajemen logistik laboratorium rumah sakit berbasis web menggu
 - **Frontend**: React, Vite, Tailwind CSS, Shadcn UI
 - **Authentication**: JWT
 
+## Express Install
+
+1. Buka install-all.bat
+2. Siapkan database PostgreSQL. Buat database baru dengan nama sesuai dengan `DB_NAME` di `backend/.env` (default: `sim_logistik_lab`)
+3. Buka setup-database.bat
+4. Buka build.bat
+5. Buka start.bat (jangan ditutup)
+
 ## Instalasi
 
 1. Install dependencies dari root:
