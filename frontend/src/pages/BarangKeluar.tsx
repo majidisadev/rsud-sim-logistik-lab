@@ -10,7 +10,6 @@ import { useAuth } from "../contexts/AuthContext";
 export default function BarangKeluar() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [transactions, setTransactions] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
