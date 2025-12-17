@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon",
-    "build": "tsc && copy src\\migrations\\createTables.sql dist\\migrations\\createTables.sql",
+    "build": "tsc && node -e \"require('fs').mkdirSync('dist/migrations', {recursive: true}); require('fs').copyFileSync('src/migrations/createTables.sql', 'dist/migrations/createTables.sql')\"",
     "start": "node dist/server.js",
     "migrate": "node dist/migrations/runMigrations.js"
   },
@@ -32,4 +32,3 @@
     "ts-node": "^10.9.2"
   }
 }
-
