@@ -1,12 +1,21 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import api from '../lib/api';
-import { ArrowLeft, Edit, Trash2, Plus, Filter, X } from 'lucide-react';
-import Button from '../components/ui/Button';
-import Input from '../components/ui/Input';
-import Modal from '../components/ui/Modal';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { useAuth } from '../contexts/AuthContext';
+import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import api from "../lib/api";
+import { ArrowLeft, Edit, Plus, Filter, X } from "lucide-react";
+import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
+import Modal from "../components/ui/Modal";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
+import { useAuth } from "../contexts/AuthContext";
 
 export default function ItemDetail() {
   const { id } = useParams();
@@ -18,24 +27,41 @@ export default function ItemDetail() {
   const [showEditLotModal, setShowEditLotModal] = useState(false);
   const [showEditItemModal, setShowEditItemModal] = useState(false);
   const [selectedLot, setSelectedLot] = useState<any>(null);
-  const [lotForm, setLotForm] = useState({ lot_number: '', expiration_date: '', stock: 0 });
+  const [lotForm, setLotForm] = useState({
+    lot_number: "",
+    expiration_date: "",
+    stock: 0,
+  });
   const [transactions, setTransactions] = useState<any[]>([]);
-  const [transactionFilter, setTransactionFilter] = useState({ type: '', start_date: '', end_date: '' });
-  const [tempFilter, setTempFilter] = useState({ type: '', start_date: '', end_date: '' });
+  const [allTransactions, setAllTransactions] = useState<any[]>([]);
+  const [transactionFilter, setTransactionFilter] = useState({
+    type: "",
+    start_date: "",
+    end_date: "",
+  });
+  const [tempFilter, setTempFilter] = useState({
+    type: "",
+    start_date: "",
+    end_date: "",
+  });
+  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [currentPage, setCurrentPage] = useState(1);
   const [monthlyStats, setMonthlyStats] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [editForm, setEditForm] = useState({
-    name: '',
-    description: '',
-    unit: '',
-    temperature: '',
+    name: "",
+    description: "",
+    category_id: "",
+    unit: "",
+    temperature: "",
     min_stock: 1,
-    image: '',
+    image: "",
     suppliers: [] as string[],
   });
-  const [imageMode, setImageMode] = useState<'url' | 'upload'>('url');
+  const [imageMode, setImageMode] = useState<"url" | "upload">("url");
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string>('');
+  const [imagePreview, setImagePreview] = useState<string>("");
 
   useEffect(() => {
     if (id) {
@@ -43,21 +69,31 @@ export default function ItemDetail() {
       fetchTransactions();
       fetchMonthlyStats();
       fetchSuppliers();
+      fetchCategories();
+      setCurrentPage(1);
     }
   }, [id]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [itemsPerPage, transactionFilter]);
 
   const fetchItem = async () => {
     try {
       const res = await api.get(`/items/${id}`);
       setItem(res.data);
     } catch (error) {
-      console.error('Error fetching item:', error);
+      console.error("Error fetching item:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchTransactions = async (filter?: { type: string; start_date: string; end_date: string }) => {
+  const fetchTransactions = async (filter?: {
+    type: string;
+    start_date: string;
+    end_date: string;
+  }) => {
     try {
       const activeFilter = filter || transactionFilter;
       const params: any = { item_id: id };
@@ -65,10 +101,11 @@ export default function ItemDetail() {
       if (activeFilter.start_date) params.start_date = activeFilter.start_date;
       if (activeFilter.end_date) params.end_date = activeFilter.end_date;
 
-      const res = await api.get('/transactions', { params });
+      const res = await api.get("/transactions", { params });
+      setAllTransactions(res.data);
       setTransactions(res.data);
     } catch (error) {
-      console.error('Error fetching transactions:', error);
+      console.error("Error fetching transactions:", error);
     }
   };
 
@@ -78,7 +115,7 @@ export default function ItemDetail() {
   };
 
   const handleResetFilter = () => {
-    const emptyFilter = { type: '', start_date: '', end_date: '' };
+    const emptyFilter = { type: "", start_date: "", end_date: "" };
     setTempFilter(emptyFilter);
     setTransactionFilter(emptyFilter);
     fetchTransactions(emptyFilter);
@@ -90,8 +127,8 @@ export default function ItemDetail() {
       const currentYear = new Date().getFullYear();
       const startDate = `${currentYear}-01-01`;
       const endDate = `${currentYear}-12-31`;
-      
-      const res = await api.get('/transactions', {
+
+      const res = await api.get("/transactions", {
         params: {
           item_id: id,
           start_date: startDate,
@@ -99,25 +136,46 @@ export default function ItemDetail() {
         },
       });
 
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+      const months = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "Mei",
+        "Jun",
+        "Jul",
+        "Agu",
+        "Sep",
+        "Okt",
+        "Nov",
+        "Des",
+      ];
       const monthlyData = months.map((month, idx) => {
-        const monthStr = `${currentYear}-${String(idx + 1).padStart(2, '0')}`;
-        
+        const monthStr = `${currentYear}-${String(idx + 1).padStart(2, "0")}`;
+
         // Filter transactions for this month
         const monthTransactions = res.data.filter((tx: any) => {
           const txDate = new Date(tx.created_at);
-          const txMonth = `${txDate.getFullYear()}-${String(txDate.getMonth() + 1).padStart(2, '0')}`;
+          const txMonth = `${txDate.getFullYear()}-${String(
+            txDate.getMonth() + 1
+          ).padStart(2, "0")}`;
           return txMonth === monthStr;
         });
 
         // Sum quantities by type
         const masukTotal = monthTransactions
-          .filter((tx: any) => tx.type === 'Masuk')
-          .reduce((sum: number, tx: any) => sum + (parseInt(tx.quantity) || 0), 0);
-        
+          .filter((tx: any) => tx.type === "Masuk")
+          .reduce(
+            (sum: number, tx: any) => sum + (parseInt(tx.quantity) || 0),
+            0
+          );
+
         const keluarTotal = monthTransactions
-          .filter((tx: any) => tx.type === 'Keluar')
-          .reduce((sum: number, tx: any) => sum + (parseInt(tx.quantity) || 0), 0);
+          .filter((tx: any) => tx.type === "Keluar")
+          .reduce(
+            (sum: number, tx: any) => sum + (parseInt(tx.quantity) || 0),
+            0
+          );
 
         return {
           month,
@@ -127,16 +185,25 @@ export default function ItemDetail() {
       });
       setMonthlyStats(monthlyData);
     } catch (error) {
-      console.error('Error fetching monthly stats:', error);
+      console.error("Error fetching monthly stats:", error);
     }
   };
 
   const fetchSuppliers = async () => {
     try {
-      const res = await api.get('/suppliers');
+      const res = await api.get("/suppliers");
       setSuppliers(res.data);
     } catch (error) {
-      console.error('Error fetching suppliers:', error);
+      console.error("Error fetching suppliers:", error);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const res = await api.get("/categories");
+      setCategories(res.data);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
     }
   };
 
@@ -156,17 +223,18 @@ export default function ItemDetail() {
   const handleOpenEditModal = () => {
     if (item) {
       setEditForm({
-        name: item.name || '',
-        description: item.description || '',
-        unit: item.unit || '',
-        temperature: item.temperature || '',
+        name: item.name || "",
+        description: item.description || "",
+        category_id: item.category_id?.toString() || "",
+        unit: item.unit || "",
+        temperature: item.temperature || "",
         min_stock: item.min_stock || 1,
-        image: item.image || '',
+        image: item.image || "",
         suppliers: item.suppliers?.map((s: any) => s.id.toString()) || [],
       });
-      setImageMode(item.image ? 'url' : 'url');
+      setImageMode(item.image ? "url" : "url");
       setImageFile(null);
-      setImagePreview(item.image || '');
+      setImagePreview(item.image || "");
       setShowEditItemModal(true);
     }
   };
@@ -176,13 +244,16 @@ export default function ItemDetail() {
       let imageUrl = editForm.image;
 
       // If image file is uploaded, convert to base64
-      if (imageFile && imageMode === 'upload') {
+      if (imageFile && imageMode === "upload") {
         imageUrl = imagePreview;
       }
 
       const updateData: any = {
         name: editForm.name,
         description: editForm.description,
+        category_id: editForm.category_id
+          ? parseInt(editForm.category_id)
+          : null,
         unit: editForm.unit,
         temperature: editForm.temperature,
         min_stock: parseInt(editForm.min_stock.toString()),
@@ -193,10 +264,10 @@ export default function ItemDetail() {
       await api.put(`/items/${id}`, updateData);
       setShowEditItemModal(false);
       setImageFile(null);
-      setImagePreview('');
+      setImagePreview("");
       fetchItem();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error updating item');
+      alert(error.response?.data?.error || "Error updating item");
     }
   };
 
@@ -207,10 +278,10 @@ export default function ItemDetail() {
         stock: parseInt(lotForm.stock.toString()),
       });
       setShowLotModal(false);
-      setLotForm({ lot_number: '', expiration_date: '', stock: 0 });
+      setLotForm({ lot_number: "", expiration_date: "", stock: 0 });
       fetchItem();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error adding lot');
+      alert(error.response?.data?.error || "Error adding lot");
     }
   };
 
@@ -222,25 +293,27 @@ export default function ItemDetail() {
       });
       setShowEditLotModal(false);
       setSelectedLot(null);
-      setLotForm({ lot_number: '', expiration_date: '', stock: 0 });
+      setLotForm({ lot_number: "", expiration_date: "", stock: 0 });
       fetchItem();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error updating lot');
+      alert(error.response?.data?.error || "Error updating lot");
     }
   };
 
   const handleDeleteLot = async (lotId: number) => {
-    if (!confirm('Hapus lot ini?')) return;
+    if (!confirm("Hapus lot ini?")) return;
     try {
       await api.delete(`/items/${id}/lots/${lotId}`);
       fetchItem();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Error deleting lot');
+      alert(error.response?.data?.error || "Error deleting lot");
     }
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-64">Loading...</div>
+    );
   }
 
   if (!item) {
@@ -252,9 +325,15 @@ export default function ItemDetail() {
     return new Date(expirationDate) < new Date();
   };
 
+  // Calculate pagination
+  const totalPages = Math.ceil(allTransactions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedTransactions = allTransactions.slice(startIndex, endIndex);
+
   return (
     <div className="space-y-6">
-      <Button variant="outline" onClick={() => navigate('/barang')}>
+      <Button variant="outline" onClick={() => navigate("/barang")}>
         <ArrowLeft className="w-4 h-4 mr-2" />
         Kembali
       </Button>
@@ -264,7 +343,7 @@ export default function ItemDetail() {
           <div className="flex-1">
             <h1 className="text-3xl font-bold">{item.name}</h1>
           </div>
-          {(user?.role === 'Admin' || user?.role === 'PJ Gudang') && (
+          {(user?.role === "Admin" || user?.role === "PJ Gudang") && (
             <Button onClick={handleOpenEditModal}>
               <Edit className="w-4 h-4 mr-2" />
               Edit Barang
@@ -273,27 +352,31 @@ export default function ItemDetail() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {item.image && (
-            <img src={item.image} alt={item.name} className="w-full h-64 object-cover rounded-lg" />
+            <img
+              src={item.image}
+              alt={item.name}
+              className="w-full h-64 object-cover rounded-lg"
+            />
           )}
           <div className="space-y-4">
-            <p className="text-gray-600">{item.description || '-'}</p>
+            <p className="text-gray-600">{item.description || "-"}</p>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-500">Kategori</p>
-                <p className="font-medium">{item.category_name || '-'}</p>
+                <p className="font-medium">{item.category_name || "-"}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Expiration</p>
                 <p
                   className={`font-medium ${
                     item.expiration_date && isExpired(item.expiration_date)
-                      ? 'text-red-600'
-                      : ''
+                      ? "text-red-600"
+                      : ""
                   }`}
                 >
                   {item.expiration_date
-                    ? new Date(item.expiration_date).toLocaleDateString('id-ID')
-                    : '-'}
+                    ? new Date(item.expiration_date).toLocaleDateString("id-ID")
+                    : "-"}
                 </p>
               </div>
               <div>
@@ -306,24 +389,26 @@ export default function ItemDetail() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Satuan</p>
-                <p className="font-medium">{item.unit || '-'}</p>
+                <p className="font-medium">{item.unit || "-"}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Suhu</p>
-                <p className="font-medium">{item.temperature || '-'}</p>
+                <p className="font-medium">{item.temperature || "-"}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Opname Terakhir</p>
                 <p className="font-medium">
                   {item.last_opname_date
-                    ? new Date(item.last_opname_date).toLocaleDateString('id-ID')
-                    : '-'}
+                    ? new Date(item.last_opname_date).toLocaleDateString(
+                        "id-ID"
+                      )
+                    : "-"}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">Supplier</p>
                 <p className="font-medium">
-                  {item.suppliers?.map((s: any) => s.name).join(', ') || '-'}
+                  {item.suppliers?.map((s: any) => s.name).join(", ") || "-"}
                 </p>
               </div>
             </div>
@@ -332,7 +417,9 @@ export default function ItemDetail() {
       </div>
 
       {/* Lots Section */}
-      {(user?.role === 'Admin' || user?.role === 'PJ Gudang' || user?.role === 'User') && (
+      {(user?.role === "Admin" ||
+        user?.role === "PJ Gudang" ||
+        user?.role === "User") && (
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Nomor Lot</h2>
@@ -357,8 +444,10 @@ export default function ItemDetail() {
                     <td className="px-4 py-2">{lot.lot_number}</td>
                     <td className="px-4 py-2">
                       {lot.expiration_date
-                        ? new Date(lot.expiration_date).toLocaleDateString('id-ID')
-                        : '-'}
+                        ? new Date(lot.expiration_date).toLocaleDateString(
+                            "id-ID"
+                          )
+                        : "-"}
                     </td>
                     <td className="px-4 py-2">{lot.stock}</td>
                     <td className="px-4 py-2">
@@ -370,7 +459,7 @@ export default function ItemDetail() {
                             setSelectedLot(lot);
                             setLotForm({
                               lot_number: lot.lot_number,
-                              expiration_date: lot.expiration_date || '',
+                              expiration_date: lot.expiration_date || "",
                               stock: lot.stock,
                             });
                             setShowEditLotModal(true);
@@ -378,15 +467,6 @@ export default function ItemDetail() {
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
-                        {lot.stock === 0 && (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleDeleteLot(lot.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -407,8 +487,22 @@ export default function ItemDetail() {
             <YAxis />
             <Tooltip />
             <Legend />
-            <Line type="monotone" dataKey="Masuk" stroke="#3b82f6" strokeWidth={2} name="Barang Masuk" dot />
-            <Line type="monotone" dataKey="Keluar" stroke="#ef4444" strokeWidth={2} name="Barang Keluar" dot />
+            <Line
+              type="monotone"
+              dataKey="Masuk"
+              stroke="#3b82f6"
+              strokeWidth={2}
+              name="Barang Masuk"
+              dot
+            />
+            <Line
+              type="monotone"
+              dataKey="Keluar"
+              stroke="#ef4444"
+              strokeWidth={2}
+              name="Barang Keluar"
+              dot
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -457,6 +551,24 @@ export default function ItemDetail() {
             <X className="w-4 h-4 mr-2" />
             Reset
           </Button>
+          <div className="ml-auto">
+            <label className="block text-sm font-medium mb-2">
+              Items per Page
+            </label>
+            <select
+              value={itemsPerPage}
+              onChange={(e) => {
+                setItemsPerPage(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="border border-gray-300 rounded-lg p-2"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -470,30 +582,74 @@ export default function ItemDetail() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {transactions.map((tx) => (
-                <tr key={tx.id}>
-                  <td className="px-4 py-2">
-                    <span
-                      className={`px-2 py-1 rounded text-sm ${
-                        tx.type === 'Masuk'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {tx.type}
-                    </span>
+              {paginatedTransactions.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-4 text-center text-gray-500"
+                  >
+                    Tidak ada data
                   </td>
-                  <td className="px-4 py-2">
-                    {new Date(tx.created_at).toLocaleString('id-ID')}
-                  </td>
-                  <td className="px-4 py-2">{tx.user_name}</td>
-                  <td className="px-4 py-2">{tx.quantity}</td>
-                  <td className="px-4 py-2">{tx.notes || '-'}</td>
                 </tr>
-              ))}
+              ) : (
+                paginatedTransactions.map((tx) => (
+                  <tr key={tx.id}>
+                    <td className="px-4 py-2">
+                      <span
+                        className={`px-2 py-1 rounded text-sm ${
+                          tx.type === "Masuk"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {tx.type}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2">
+                      {new Date(tx.created_at).toLocaleString("id-ID")}
+                    </td>
+                    <td className="px-4 py-2">{tx.user_name}</td>
+                    <td className="px-4 py-2">{tx.quantity}</td>
+                    <td className="px-4 py-2">{tx.notes || "-"}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
+        {/* Pagination Controls */}
+        {allTransactions.length > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              Menampilkan {startIndex + 1} sampai{" "}
+              {Math.min(endIndex, allTransactions.length)} dari{" "}
+              {allTransactions.length} data
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                disabled={currentPage === 1}
+              >
+                Sebelumnya
+              </Button>
+              <span className="text-sm text-gray-700">
+                Halaman {currentPage} dari {totalPages}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                }
+                disabled={currentPage === totalPages}
+              >
+                Selanjutnya
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add Lot Modal */}
@@ -507,16 +663,22 @@ export default function ItemDetail() {
             <label className="block text-sm font-medium mb-2">Nomor Lot</label>
             <Input
               value={lotForm.lot_number}
-              onChange={(e) => setLotForm({ ...lotForm, lot_number: e.target.value })}
+              onChange={(e) =>
+                setLotForm({ ...lotForm, lot_number: e.target.value })
+              }
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">Tanggal Expiration</label>
+            <label className="block text-sm font-medium mb-2">
+              Tanggal Expiration
+            </label>
             <Input
               type="date"
               value={lotForm.expiration_date}
-              onChange={(e) => setLotForm({ ...lotForm, expiration_date: e.target.value })}
+              onChange={(e) =>
+                setLotForm({ ...lotForm, expiration_date: e.target.value })
+              }
             />
           </div>
           <div>
@@ -550,20 +712,29 @@ export default function ItemDetail() {
             <label className="block text-sm font-medium mb-2">Nomor Lot</label>
             <Input
               value={lotForm.lot_number}
-              onChange={(e) => setLotForm({ ...lotForm, lot_number: e.target.value })}
+              onChange={(e) =>
+                setLotForm({ ...lotForm, lot_number: e.target.value })
+              }
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-2">Tanggal Expiration</label>
+            <label className="block text-sm font-medium mb-2">
+              Tanggal Expiration
+            </label>
             <Input
               type="date"
               value={lotForm.expiration_date}
-              onChange={(e) => setLotForm({ ...lotForm, expiration_date: e.target.value })}
+              onChange={(e) =>
+                setLotForm({ ...lotForm, expiration_date: e.target.value })
+              }
             />
           </div>
           <div className="flex justify-end space-x-2">
-            <Button variant="outline" onClick={() => setShowEditLotModal(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setShowEditLotModal(false)}
+            >
               Batal
             </Button>
             <Button onClick={handleEditLot}>Simpan</Button>
@@ -577,17 +748,21 @@ export default function ItemDetail() {
         onClose={() => {
           setShowEditItemModal(false);
           setImageFile(null);
-          setImagePreview('');
+          setImagePreview("");
         }}
         title="Edit Barang"
         size="xl"
       >
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-2">Nama Barang</label>
+            <label className="block text-sm font-medium mb-2">
+              Nama Barang
+            </label>
             <Input
               value={editForm.name}
-              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              onChange={(e) =>
+                setEditForm({ ...editForm, name: e.target.value })
+              }
               required
             />
           </div>
@@ -595,33 +770,61 @@ export default function ItemDetail() {
             <label className="block text-sm font-medium mb-2">Deskripsi</label>
             <textarea
               value={editForm.description}
-              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+              onChange={(e) =>
+                setEditForm({ ...editForm, description: e.target.value })
+              }
               className="w-full border border-gray-300 rounded-lg p-2"
               rows={3}
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Kategori</label>
+            <select
+              value={editForm.category_id}
+              onChange={(e) =>
+                setEditForm({ ...editForm, category_id: e.target.value })
+              }
+              className="w-full border border-gray-300 rounded-lg p-2"
+            >
+              <option value="">Pilih Kategori</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-2">Satuan</label>
               <Input
                 value={editForm.unit}
-                onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, unit: e.target.value })
+                }
               />
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Suhu</label>
               <Input
                 value={editForm.temperature}
-                onChange={(e) => setEditForm({ ...editForm, temperature: e.target.value })}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, temperature: e.target.value })
+                }
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">Min Stock</label>
+              <label className="block text-sm font-medium mb-2">
+                Min Stock
+              </label>
               <Input
                 type="number"
                 value={editForm.min_stock}
                 onChange={(e) =>
-                  setEditForm({ ...editForm, min_stock: parseInt(e.target.value) || 1 })
+                  setEditForm({
+                    ...editForm,
+                    min_stock: parseInt(e.target.value) || 1,
+                  })
                 }
                 min="1"
               />
@@ -634,15 +837,15 @@ export default function ItemDetail() {
                 <button
                   type="button"
                   onClick={() => {
-                    setImageMode('url');
+                    setImageMode("url");
                     setImageFile(null);
-                    setImagePreview('');
-                    setEditForm({ ...editForm, image: '' });
+                    setImagePreview("");
+                    setEditForm({ ...editForm, image: "" });
                   }}
                   className={`px-3 py-1 text-sm rounded-lg transition-colors ${
-                    imageMode === 'url'
-                      ? 'bg-primary text-white'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    imageMode === "url"
+                      ? "bg-primary text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                   }`}
                 >
                   URL
@@ -650,24 +853,26 @@ export default function ItemDetail() {
                 <button
                   type="button"
                   onClick={() => {
-                    setImageMode('upload');
-                    setEditForm({ ...editForm, image: '' });
+                    setImageMode("upload");
+                    setEditForm({ ...editForm, image: "" });
                   }}
                   className={`px-3 py-1 text-sm rounded-lg transition-colors ${
-                    imageMode === 'upload'
-                      ? 'bg-primary text-white'
-                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    imageMode === "upload"
+                      ? "bg-primary text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                   }`}
                 >
                   Upload
                 </button>
               </div>
             </div>
-            {imageMode === 'url' ? (
+            {imageMode === "url" ? (
               <Input
                 type="url"
                 value={editForm.image}
-                onChange={(e) => setEditForm({ ...editForm, image: e.target.value })}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, image: e.target.value })
+                }
                 placeholder="Masukkan URL gambar"
               />
             ) : (
@@ -689,14 +894,14 @@ export default function ItemDetail() {
                 )}
               </div>
             )}
-            {editForm.image && imageMode === 'url' && (
+            {editForm.image && imageMode === "url" && (
               <div className="mt-2">
                 <img
                   src={editForm.image}
                   alt="Preview"
                   className="max-w-full h-32 object-contain rounded-lg border border-gray-300"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = 'none';
+                    (e.target as HTMLImageElement).style.display = "none";
                   }}
                 />
               </div>
@@ -706,20 +911,30 @@ export default function ItemDetail() {
             <label className="block text-sm font-medium mb-2">Supplier</label>
             <div className="border border-gray-300 rounded-lg p-2 max-h-40 overflow-y-auto">
               {suppliers.map((supplier) => (
-                <label key={supplier.id} className="flex items-center space-x-2 p-2">
+                <label
+                  key={supplier.id}
+                  className="flex items-center space-x-2 p-2"
+                >
                   <input
                     type="checkbox"
-                    checked={editForm.suppliers.includes(supplier.id.toString())}
+                    checked={editForm.suppliers.includes(
+                      supplier.id.toString()
+                    )}
                     onChange={(e) => {
                       if (e.target.checked) {
                         setEditForm({
                           ...editForm,
-                          suppliers: [...editForm.suppliers, supplier.id.toString()],
+                          suppliers: [
+                            ...editForm.suppliers,
+                            supplier.id.toString(),
+                          ],
                         });
                       } else {
                         setEditForm({
                           ...editForm,
-                          suppliers: editForm.suppliers.filter((s) => s !== supplier.id.toString()),
+                          suppliers: editForm.suppliers.filter(
+                            (s) => s !== supplier.id.toString()
+                          ),
                         });
                       }
                     }}
@@ -735,7 +950,7 @@ export default function ItemDetail() {
               onClick={() => {
                 setShowEditItemModal(false);
                 setImageFile(null);
-                setImagePreview('');
+                setImagePreview("");
               }}
             >
               Batal
@@ -747,4 +962,3 @@ export default function ItemDetail() {
     </div>
   );
 }
-

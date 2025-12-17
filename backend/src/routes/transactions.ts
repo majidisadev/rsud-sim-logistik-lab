@@ -1,12 +1,12 @@
-import express from 'express';
-import pool from '../config/database';
-import { AuthRequest } from '../middleware/auth';
-import { requireRole } from '../middleware/auth';
+import express from "express";
+import pool from "../config/database";
+import { AuthRequest } from "../middleware/auth";
+import { requireRole } from "../middleware/auth";
 
 const router = express.Router();
 
 // Get all transactions with filters
-router.get('/', async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     const { type, item_id, start_date, end_date } = req.query;
 
@@ -52,17 +52,17 @@ router.get('/', async (req, res) => {
     const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
-    console.error('Get transactions error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Get transactions error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // Get transaction statistics for dashboard
-router.get('/stats', async (req, res) => {
+router.get("/stats", async (req, res) => {
   try {
     const { period } = req.query; // 'daily' or 'monthly'
 
-    if (period === 'daily') {
+    if (period === "daily") {
       const result = await pool.query(
         `SELECT 
           DATE(created_at) as date,
@@ -89,44 +89,56 @@ router.get('/stats', async (req, res) => {
       res.json(result.rows);
     }
   } catch (error) {
-    console.error('Get transaction stats error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Get transaction stats error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // Create transaction (Barang Masuk or Keluar)
-router.post('/', async (req: AuthRequest, res) => {
+router.post("/", async (req: AuthRequest, res) => {
   try {
-    const { type, item_id, lot_id, quantity, notes, lot_number, expiration_date } = req.body;
+    const {
+      type,
+      item_id,
+      lot_id,
+      quantity,
+      notes,
+      lot_number,
+      expiration_date,
+    } = req.body;
 
     if (!type || !item_id || !quantity) {
-      return res.status(400).json({ error: 'Type, item_id, and quantity are required' });
+      return res
+        .status(400)
+        .json({ error: "Type, item_id, and quantity are required" });
     }
 
-    if (!['Masuk', 'Keluar'].includes(type)) {
-      return res.status(400).json({ error: 'Invalid transaction type' });
+    if (!["Masuk", "Keluar"].includes(type)) {
+      return res.status(400).json({ error: "Invalid transaction type" });
     }
 
     if (quantity <= 0) {
-      return res.status(400).json({ error: 'Quantity must be positive' });
+      return res.status(400).json({ error: "Quantity must be positive" });
     }
 
     const client = await pool.connect();
     try {
-      await client.query('BEGIN');
+      await client.query("BEGIN");
 
       let finalLotId = lot_id;
 
       // If lot_id not provided, create new lot
       if (!lot_id) {
         if (!lot_number) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Lot number is required when creating new lot' });
+          await client.query("ROLLBACK");
+          return res
+            .status(400)
+            .json({ error: "Lot number is required when creating new lot" });
         }
 
         // Check if lot already exists
         const existingLot = await client.query(
-          'SELECT id FROM lots WHERE item_id = $1 AND lot_number = $2',
+          "SELECT id FROM lots WHERE item_id = $1 AND lot_number = $2",
           [item_id, lot_number]
         );
 
@@ -146,32 +158,32 @@ router.post('/', async (req: AuthRequest, res) => {
 
       // Get current lot stock
       const lotResult = await client.query(
-        'SELECT stock FROM lots WHERE id = $1',
+        "SELECT stock FROM lots WHERE id = $1",
         [finalLotId]
       );
 
       if (lotResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Lot not found' });
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Lot not found" });
       }
 
       const currentStock = lotResult.rows[0].stock;
       let newStock: number;
 
-      if (type === 'Masuk') {
+      if (type === "Masuk") {
         newStock = currentStock + quantity;
       } else {
         // Keluar
         newStock = currentStock - quantity;
         if (newStock < 0) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Insufficient stock in lot' });
+          await client.query("ROLLBACK");
+          return res.status(400).json({ error: "Insufficient stock in lot" });
         }
       }
 
       // Update lot stock
       await client.query(
-        'UPDATE lots SET stock = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        "UPDATE lots SET stock = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
         [newStock, finalLotId]
       );
 
@@ -183,7 +195,7 @@ router.post('/', async (req: AuthRequest, res) => {
         [type, item_id, finalLotId, quantity, req.user!.id, notes || null]
       );
 
-      await client.query('COMMIT');
+      await client.query("COMMIT");
 
       // Get full transaction details
       const fullResult = await pool.query(
@@ -202,49 +214,54 @@ router.post('/', async (req: AuthRequest, res) => {
 
       res.status(201).json(fullResult.rows[0]);
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
     }
   } catch (error: any) {
-    console.error('Create transaction error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Create transaction error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // Update transaction
-router.put('/:id', async (req: AuthRequest, res) => {
+router.put("/:id", async (req: AuthRequest, res) => {
   try {
     const { id } = req.params;
     const { quantity, notes } = req.body;
 
     const client = await pool.connect();
     try {
-      await client.query('BEGIN');
+      await client.query("BEGIN");
 
       // Get current transaction
       const currentResult = await client.query(
-        'SELECT * FROM transactions WHERE id = $1',
+        "SELECT * FROM transactions WHERE id = $1",
         [id]
       );
 
       if (currentResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Transaction not found' });
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Transaction not found" });
       }
 
       const currentTransaction = currentResult.rows[0];
 
       // For User role, check if they own this transaction
-      if (req.user!.role === 'User' && currentTransaction.user_id !== req.user!.id) {
-        await client.query('ROLLBACK');
-        return res.status(403).json({ error: 'You can only edit your own transactions' });
+      if (
+        req.user!.role === "User" &&
+        currentTransaction.user_id !== req.user!.id
+      ) {
+        await client.query("ROLLBACK");
+        return res
+          .status(403)
+          .json({ error: "You can only edit your own transactions" });
       }
 
       // Get current lot stock
       const lotResult = await client.query(
-        'SELECT stock FROM lots WHERE id = $1',
+        "SELECT stock FROM lots WHERE id = $1",
         [currentTransaction.lot_id]
       );
 
@@ -254,7 +271,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
 
       let newStock: number;
 
-      if (currentTransaction.type === 'Masuk') {
+      if (currentTransaction.type === "Masuk") {
         // If quantity increased, add to stock; if decreased, subtract
         newStock = currentStock + quantityDiff;
       } else {
@@ -263,13 +280,13 @@ router.put('/:id', async (req: AuthRequest, res) => {
       }
 
       if (newStock < 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Insufficient stock in lot' });
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Insufficient stock in lot" });
       }
 
       // Update lot stock
       await client.query(
-        'UPDATE lots SET stock = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        "UPDATE lots SET stock = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
         [newStock, currentTransaction.lot_id]
       );
 
@@ -291,12 +308,14 @@ router.put('/:id', async (req: AuthRequest, res) => {
       if (updateFields.length > 0) {
         values.push(id);
         await client.query(
-          `UPDATE transactions SET ${updateFields.join(', ')} WHERE id = $${paramCount}`,
+          `UPDATE transactions SET ${updateFields.join(
+            ", "
+          )} WHERE id = $${paramCount}`,
           values
         );
       }
 
-      await client.query('COMMIT');
+      await client.query("COMMIT");
 
       // Get updated transaction
       const result = await pool.query(
@@ -315,49 +334,49 @@ router.put('/:id', async (req: AuthRequest, res) => {
 
       res.json(result.rows[0]);
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
     }
   } catch (error: any) {
-    console.error('Update transaction error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Update transaction error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 // Delete transaction (Admin and PJ Gudang only, User cannot delete)
-router.delete('/:id', requireRole('Admin', 'PJ Gudang'), async (req, res) => {
+router.delete("/:id", requireRole("Admin", "PJ Gudang"), async (req, res) => {
   try {
     const { id } = req.params;
 
     const client = await pool.connect();
     try {
-      await client.query('BEGIN');
+      await client.query("BEGIN");
 
       // Get transaction
       const transactionResult = await client.query(
-        'SELECT * FROM transactions WHERE id = $1',
+        "SELECT * FROM transactions WHERE id = $1",
         [id]
       );
 
       if (transactionResult.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Transaction not found' });
+        await client.query("ROLLBACK");
+        return res.status(404).json({ error: "Transaction not found" });
       }
 
       const transaction = transactionResult.rows[0];
 
       // Get current lot stock
       const lotResult = await client.query(
-        'SELECT stock FROM lots WHERE id = $1',
+        "SELECT stock FROM lots WHERE id = $1",
         [transaction.lot_id]
       );
 
       const currentStock = lotResult.rows[0].stock;
       let newStock: number;
 
-      if (transaction.type === 'Masuk') {
+      if (transaction.type === "Masuk") {
         // Reverse masuk: subtract
         newStock = currentStock - transaction.quantity;
       } else {
@@ -366,33 +385,34 @@ router.delete('/:id', requireRole('Admin', 'PJ Gudang'), async (req, res) => {
       }
 
       if (newStock < 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Cannot delete: would result in negative stock' });
+        await client.query("ROLLBACK");
+        return res
+          .status(400)
+          .json({ error: "Cannot delete: would result in negative stock" });
       }
 
       // Update lot stock
       await client.query(
-        'UPDATE lots SET stock = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        "UPDATE lots SET stock = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
         [newStock, transaction.lot_id]
       );
 
       // Delete transaction
-      await client.query('DELETE FROM transactions WHERE id = $1', [id]);
+      await client.query("DELETE FROM transactions WHERE id = $1", [id]);
 
-      await client.query('COMMIT');
+      await client.query("COMMIT");
 
-      res.json({ message: 'Transaction deleted successfully' });
+      res.json({ message: "Transaction deleted successfully" });
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
     }
   } catch (error: any) {
-    console.error('Delete transaction error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error("Delete transaction error:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
 export default router;
-

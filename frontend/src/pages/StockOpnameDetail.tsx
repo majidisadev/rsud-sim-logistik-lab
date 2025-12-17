@@ -17,6 +17,7 @@ export default function StockOpnameDetail() {
     recorded_stock: '',
     opname_stock: '',
     expiration_match: 'Sesuai',
+    recorded_expiration: '',
   });
 
   useEffect(() => {
@@ -69,7 +70,9 @@ export default function StockOpnameDetail() {
           recorded_stock: '',
           opname_stock: '',
           expiration_match: 'Sesuai',
+          recorded_expiration: '',
         });
+        setItemSearch('');
         fetchOpname();
       }
     } catch (error: any) {
@@ -108,7 +111,7 @@ export default function StockOpnameDetail() {
 
       <div className="bg-white rounded-lg shadow p-6">
         <h2 className="text-xl font-semibold mb-4">Tambah Stock Opname</h2>
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-7 gap-4 mb-4">
           <div className="md:col-span-2">
             <label className="block text-sm font-medium mb-2">Nama Barang</label>
             <Input
@@ -122,11 +125,12 @@ export default function StockOpnameDetail() {
                 );
                 if (found) {
                   setNewItem({ ...newItem, item_id: found.id.toString() });
-                  // Fetch item details to get recorded stock
+                  // Fetch item details to get recorded stock and expiration date
                   api.get(`/items/${found.id}`).then((res) => {
                     setNewItem((prev) => ({
                       ...prev,
                       recorded_stock: res.data.total_stock.toString(),
+                      recorded_expiration: res.data.expiration_date || '',
                     }));
                   });
                 }
@@ -146,6 +150,7 @@ export default function StockOpnameDetail() {
                           setNewItem((prev) => ({
                             ...prev,
                             recorded_stock: res.data.total_stock.toString(),
+                            recorded_expiration: res.data.expiration_date || '',
                           }));
                         });
                       }}
@@ -173,6 +178,19 @@ export default function StockOpnameDetail() {
               value={newItem.opname_stock}
               onChange={(e) => setNewItem({ ...newItem, opname_stock: e.target.value })}
               required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Kadaluarsa Tercatat</label>
+            <Input
+              type="text"
+              value={
+                newItem.recorded_expiration
+                  ? new Date(newItem.recorded_expiration).toLocaleDateString('id-ID')
+                  : '-'
+              }
+              readOnly
+              className="bg-gray-50"
             />
           </div>
           <div>

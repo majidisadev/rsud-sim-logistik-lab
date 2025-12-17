@@ -87,9 +87,10 @@ export default function BarangKeluar() {
       await api.post("/transactions", {
         type: "Keluar",
         item_id: form.item_id,
-        lot_id: form.lot_id || undefined,
-        lot_number: form.lot_id ? undefined : form.lot_number,
-        expiration_date: form.expiration_date || undefined,
+        lot_id: form.lot_id && form.lot_id !== "new" ? form.lot_id : undefined,
+        lot_number: form.lot_id === "new" ? form.lot_number : undefined,
+        expiration_date:
+          form.lot_id === "new" ? form.expiration_date || undefined : undefined,
         quantity: parseInt(form.quantity),
         notes: form.notes.substring(0, 25),
       });
@@ -222,6 +223,9 @@ export default function BarangKeluar() {
                   Barang
                 </th>
                 <th className="px-6 py-3 text-xs font-medium text-left text-gray-500 uppercase">
+                  Lot
+                </th>
+                <th className="px-6 py-3 text-xs font-medium text-left text-gray-500 uppercase">
                   Jumlah Keluar
                 </th>
                 <th className="px-6 py-3 text-xs font-medium text-left text-gray-500 uppercase">
@@ -238,14 +242,14 @@ export default function BarangKeluar() {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-4 text-center">
+                  <td colSpan={7} className="px-6 py-4 text-center">
                     Loading...
                   </td>
                 </tr>
               ) : paginatedTransactions.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className="px-6 py-4 text-center text-gray-500"
                   >
                     Tidak ada data
@@ -264,6 +268,9 @@ export default function BarangKeluar() {
                       >
                         {tx.item_name}
                       </button>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {tx.lot_number || "-"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {tx.quantity}
@@ -322,7 +329,9 @@ export default function BarangKeluar() {
         {allTransactions.length > 0 && (
           <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
             <div className="text-sm text-gray-700">
-              Menampilkan {startIndex + 1} sampai {Math.min(endIndex, allTransactions.length)} dari {allTransactions.length} data
+              Menampilkan {startIndex + 1} sampai{" "}
+              {Math.min(endIndex, allTransactions.length)} dari{" "}
+              {allTransactions.length} data
             </div>
             <div className="flex items-center space-x-2">
               <Button
@@ -339,7 +348,9 @@ export default function BarangKeluar() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(totalPages, prev + 1))
+                }
                 disabled={currentPage === totalPages}
               >
                 Selanjutnya
@@ -403,9 +414,19 @@ export default function BarangKeluar() {
                   value={form.lot_id}
                   onChange={(e) => {
                     if (e.target.value === "new") {
-                      setForm({ ...form, lot_id: "", lot_number: "" });
+                      setForm({
+                        ...form,
+                        lot_id: "new",
+                        lot_number: "",
+                        expiration_date: "",
+                      });
                     } else {
-                      setForm({ ...form, lot_id: e.target.value });
+                      setForm({
+                        ...form,
+                        lot_id: e.target.value,
+                        lot_number: "",
+                        expiration_date: "",
+                      });
                     }
                   }}
                   className="w-full p-2 border border-gray-300 rounded-lg"
@@ -419,12 +440,13 @@ export default function BarangKeluar() {
                         ? new Date(lot.expiration_date).toLocaleDateString(
                             "id-ID"
                           )
-                        : "No expiration"}
+                        : "No expiration"}{" "}
+                      (Stock: {lot.stock || 0})
                     </option>
                   ))}
                 </select>
               </div>
-              {(!form.lot_id || form.lot_id === "new") && (
+              {form.lot_id === "new" && (
                 <>
                   <div>
                     <label className="block mb-2 text-sm font-medium">
