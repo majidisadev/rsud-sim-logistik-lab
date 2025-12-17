@@ -32,7 +32,6 @@ export default function ItemDetail() {
     expiration_date: "",
     stock: 0,
   });
-  const [transactions, setTransactions] = useState<any[]>([]);
   const [allTransactions, setAllTransactions] = useState<any[]>([]);
   const [transactionFilter, setTransactionFilter] = useState({
     type: "",
@@ -103,7 +102,6 @@ export default function ItemDetail() {
 
       const res = await api.get("/transactions", { params });
       setAllTransactions(res.data);
-      setTransactions(res.data);
     } catch (error) {
       console.error("Error fetching transactions:", error);
     }
@@ -467,6 +465,15 @@ export default function ItemDetail() {
                         >
                           <Edit className="w-4 h-4" />
                         </Button>
+                        {(user?.role === "Admin" || user?.role === "PJ Gudang") && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeleteLot(lot.id)}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </tr>
