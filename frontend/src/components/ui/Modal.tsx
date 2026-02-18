@@ -1,34 +1,40 @@
-import { ReactNode, useEffect } from 'react';
-import { X } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { ReactNode, useEffect } from "react";
+import { X } from "lucide-react";
+import { cn } from "../../lib/utils";
 
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: "sm" | "md" | "lg" | "xl";
 }
 
-export default function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+export default function Modal({
+  isOpen,
+  onClose,
+  title,
+  children,
+  size = "md",
+}: ModalProps) {
   useEffect(() => {
     if (isOpen) {
-      document.body.style.overflow = 'hidden';
+      document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     }
     return () => {
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = "unset";
     };
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   const sizeClasses = {
-    sm: 'max-w-md',
-    md: 'max-w-lg',
-    lg: 'max-w-2xl',
-    xl: 'max-w-4xl',
+    sm: "max-w-md",
+    md: "max-w-lg",
+    lg: "max-w-2xl",
+    xl: "max-w-4xl",
   };
 
   return (
@@ -36,8 +42,8 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
       <div
         className={cn(
-          'relative bg-white rounded-lg shadow-xl w-full mx-4',
-          sizeClasses[size]
+          "relative bg-white rounded-lg shadow-xl w-full mx-4",
+          sizeClasses[size],
         )}
       >
         {title && (
@@ -51,9 +57,10 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
             </button>
           </div>
         )}
-        <div className="p-6 overflow-y-auto max-h-[calc(100vh-200px)]">{children}</div>
+        <div className="p-6 overflow-y-auto max-h-[calc(100vh-200px)]">
+          {children}
+        </div>
       </div>
     </div>
   );
 }
-

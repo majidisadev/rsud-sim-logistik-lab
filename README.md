@@ -87,6 +87,8 @@ Jalankan production:
 npm start
 ```
 
+Atau double-click **start.bat** di root project untuk menjalankan server (sama seperti `npm start`).
+
 ## Default Login
 
 - Username: `admin`

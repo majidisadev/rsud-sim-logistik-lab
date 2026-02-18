@@ -15,6 +15,7 @@ import PengaturanKategori from './pages/PengaturanKategori';
 import PengaturanBarang from './pages/PengaturanBarang';
 import SupplierDetail from './pages/SupplierDetail';
 import KategoriDetail from './pages/KategoriDetail';
+import NotFound from './pages/NotFound';
 import Layout from './components/Layout';
 
 function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
@@ -105,6 +106,7 @@ function AppRoutes() {
           }
         />
       </Route>
+      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
@@ -112,7 +114,12 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <AppRoutes />
       </BrowserRouter>
     </AuthProvider>

@@ -1,7 +1,12 @@
 @echo off
-cd /d "%~dp0"
 echo Starting Production Server...
 echo.
-npm start
-pause
 
+cd /d "%~dp0"
+call npm start
+
+if errorlevel 1 (
+  echo.
+  pause
+  exit /b 1
+)
