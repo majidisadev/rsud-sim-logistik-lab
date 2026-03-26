@@ -202,8 +202,20 @@ router.post("/", requireRole("Admin"), async (req, res) => {
       suppliers,
     } = req.body;
 
-    if (!name) {
+    const normalizedName =
+      typeof name === "string" ? name.trim() : (null as any);
+    if (!normalizedName) {
       return res.status(400).json({ error: "Item name is required" });
+    }
+
+    // Prevent duplicate item names (case-insensitive)
+    const dupCheck = await pool.query(
+      "SELECT id FROM items WHERE LOWER(name) = LOWER($1) LIMIT 1",
+      [normalizedName],
+    );
+
+    if (dupCheck.rows.length > 0) {
+      return res.status(400).json({ error: "Nama barang sudah ada" });
     }
 
     const client = await pool.connect();
@@ -216,7 +228,7 @@ router.post("/", requireRole("Admin"), async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'Active')
          RETURNING *`,
         [
-          name,
+          normalizedName,
           description || null,
           category_id || null,
           unit || null,
@@ -276,6 +288,183 @@ router.post("/", requireRole("Admin"), async (req, res) => {
   }
 });
 
+// Bulk import items from Excel (Admin only)
+router.post("/import", requireRole("Admin"), async (req, res) => {
+  try {
+    const { items } = req.body as { items?: Array<any> };
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        error: "Payload import harus berupa array `items` yang tidak kosong",
+      });
+    }
+
+    const inputErrors: string[] = [];
+
+    const normalizeName = (value: any) =>
+      typeof value === "string" ? value.trim().toLowerCase() : "";
+
+    // Keep first occurrence for better error messages
+    const byName = new Map<
+      string,
+      { row: number; name: string; stock: number }
+    >();
+
+    for (const entry of items) {
+      const row = typeof entry?.row === "number" ? entry.row : undefined;
+      const rowForMsg = row ?? -1;
+
+      const rawName = entry?.name;
+      const rawStock = entry?.stock;
+
+      const name = typeof rawName === "string" ? rawName.trim() : "";
+      const nameNormalized = normalizeName(rawName);
+
+      if (!nameNormalized) {
+        inputErrors.push(
+          rowForMsg > 0
+            ? `Baris ${rowForMsg}: nama barang wajib diisi`
+            : "Nama barang wajib diisi"
+        );
+        continue;
+      }
+
+      const stockNumber =
+        typeof rawStock === "number"
+          ? rawStock
+          : rawStock === null || rawStock === undefined || rawStock === ""
+            ? NaN
+            : parseFloat(
+                typeof rawStock === "string"
+                  ? rawStock.trim().replace(",", ".")
+                  : String(rawStock)
+              );
+
+      if (!Number.isFinite(stockNumber)) {
+        inputErrors.push(
+          rowForMsg > 0
+            ? `Baris ${rowForMsg}: stock wajib berupa angka`
+            : "Stock wajib berupa angka"
+        );
+        continue;
+      }
+
+      if (stockNumber < 0) {
+        inputErrors.push(
+          rowForMsg > 0
+            ? `Baris ${rowForMsg}: stock tidak boleh negatif`
+            : "Stock tidak boleh negatif"
+        );
+        continue;
+      }
+
+      if (!Number.isInteger(stockNumber)) {
+        inputErrors.push(
+          rowForMsg > 0
+            ? `Baris ${rowForMsg}: stock harus bilangan bulat`
+            : "Stock harus bilangan bulat"
+        );
+        continue;
+      }
+
+      if (byName.has(nameNormalized)) {
+        inputErrors.push(
+          rowForMsg > 0
+            ? `Duplikasi dalam file: "${name}" (baris ${byName.get(nameNormalized)!.row} dan ${rowForMsg})`
+            : `Duplikasi dalam file: "${name}"`
+        );
+        continue;
+      }
+
+      byName.set(nameNormalized, {
+        row: rowForMsg > 0 ? rowForMsg : 0,
+        name, // keep original trimmed casing for display
+        stock: stockNumber,
+      });
+    }
+
+    if (inputErrors.length > 0) {
+      return res.status(400).json({ error: inputErrors.join("\n") });
+    }
+
+    const normalizedNames = Array.from(byName.keys());
+    if (normalizedNames.length === 0) {
+      return res.status(400).json({ error: "Tidak ada data valid untuk diimport" });
+    }
+
+    // Check duplicates against existing DB items (case-insensitive)
+    const dupCheck = await pool.query(
+      "SELECT LOWER(name) as name_lower FROM items WHERE LOWER(name) = ANY($1)",
+      [normalizedNames]
+    );
+
+    if (dupCheck.rows.length > 0) {
+      const dupNames = new Set(
+        dupCheck.rows.map((r: any) => String(r.name_lower).toLowerCase())
+      );
+
+      const dupErrors: string[] = [];
+      for (const [normalizedName, data] of byName.entries()) {
+        if (dupNames.has(normalizedName)) {
+          dupErrors.push(
+            `Nama barang sudah ada: "${data.name}" (baris ${data.row || "?"})`
+          );
+        }
+      }
+
+      return res.status(400).json({ error: dupErrors.join("\n") });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      let imported = 0;
+      for (const data of byName.values()) {
+        const itemResult = await client.query(
+          `INSERT INTO items 
+           (name, description, category_id, unit, temperature, min_stock, image, status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'Active')
+           RETURNING *`,
+          [
+            data.name,
+            null, // description
+            null, // category_id
+            null, // unit
+            null, // temperature
+            1, // min_stock (default)
+            null, // image
+          ]
+        );
+
+        const item = itemResult.rows[0];
+
+        // Create initial lot with stock from Excel
+        await client.query(
+          `INSERT INTO lots (item_id, lot_number, expiration_date, stock)
+           VALUES ($1, 'initial', NULL, $2)`,
+          [item.id, data.stock]
+        );
+
+        imported += 1;
+      }
+
+      await client.query("COMMIT");
+
+      return res.status(201).json({ message: "Import berhasil", imported });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Bulk import error:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error("Bulk import outer error:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Update item (Admin and PJ Gudang only)
 router.put("/:id", requireRole("Admin", "PJ Gudang"), async (req, res) => {
   try {
@@ -291,13 +480,32 @@ router.put("/:id", requireRole("Admin", "PJ Gudang"), async (req, res) => {
       suppliers,
     } = req.body;
 
+    const normalizedName =
+      typeof name === "string" ? name.trim() : (undefined as any);
+
+    // If client sends a name, validate it (trim + uniqueness)
+    if (name !== undefined) {
+      if (typeof name !== "string" || name.trim() === "") {
+        return res.status(400).json({ error: "Item name is required" });
+      }
+
+      const dupCheck = await pool.query(
+        "SELECT id FROM items WHERE LOWER(name) = LOWER($1) AND id != $2 LIMIT 1",
+        [normalizedName, id],
+      );
+
+      if (dupCheck.rows.length > 0) {
+        return res.status(400).json({ error: "Nama barang sudah ada" });
+      }
+    }
+
     const updateFields: string[] = [];
     const values: any[] = [];
     let paramCount = 1;
 
-    if (name) {
+    if (normalizedName) {
       updateFields.push(`name = $${paramCount++}`);
-      values.push(name);
+      values.push(normalizedName);
     }
 
     if (description !== undefined) {

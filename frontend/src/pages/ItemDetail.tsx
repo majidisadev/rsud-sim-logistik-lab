@@ -5,7 +5,7 @@ import api from "../lib/api";
 import { ArrowLeft, Edit, Plus, Filter, X, Package } from "lucide-react";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import Modal from "../components/ui/Modal";
+import RightSidePanel from "../components/ui/RightSidePanel";
 import {
   LineChart,
   Line,
@@ -303,6 +303,34 @@ export default function ItemDetail() {
 
   const handleUpdateItem = async () => {
     try {
+      const trimmedName = editForm.name.trim();
+      const normalizedName = trimmedName.toLowerCase();
+      if (!normalizedName) {
+        alert("Nama barang wajib diisi");
+        return;
+      }
+
+      // Client-side duplicate check when user changes the name.
+      const currentName = (item?.name || "").trim().toLowerCase();
+      if (normalizedName !== currentName) {
+        const res = await api.get("/items", {
+          params: {
+            include_inactive: "true",
+            search: trimmedName,
+          },
+        });
+
+        const isDuplicate = res.data.some((i: any) => {
+          const itemName = (i?.name || "").trim().toLowerCase();
+          return i.id !== id && itemName === normalizedName;
+        });
+
+        if (isDuplicate) {
+          alert("Nama barang sudah ada");
+          return;
+        }
+      }
+
       let imageUrl = editForm.image;
 
       // If image file is uploaded, convert to base64
@@ -311,7 +339,7 @@ export default function ItemDetail() {
       }
 
       const updateData: any = {
-        name: editForm.name,
+        name: trimmedName,
         description: editForm.description,
         category_id: editForm.category_id
           ? parseInt(editForm.category_id)
@@ -857,11 +885,12 @@ export default function ItemDetail() {
         </div>
       </section>
 
-      {/* Add Lot Modal */}
-      <Modal
+      {/* Tambah lot — panel kanan */}
+      <RightSidePanel
         isOpen={showLotModal}
         onClose={() => setShowLotModal(false)}
         title="Tambah Lot"
+        titleId="panel-item-lot-add"
       >
         <div className="space-y-4">
           <div>
@@ -904,13 +933,14 @@ export default function ItemDetail() {
             <Button onClick={handleAddLot}>Simpan</Button>
           </div>
         </div>
-      </Modal>
+      </RightSidePanel>
 
-      {/* Edit Lot Modal */}
-      <Modal
+      {/* Edit lot — panel kanan */}
+      <RightSidePanel
         isOpen={showEditLotModal}
         onClose={() => setShowEditLotModal(false)}
         title="Edit Lot"
+        titleId="panel-item-lot-edit"
       >
         <div className="space-y-4">
           <div>
@@ -945,10 +975,10 @@ export default function ItemDetail() {
             <Button onClick={handleEditLot}>Simpan</Button>
           </div>
         </div>
-      </Modal>
+      </RightSidePanel>
 
-      {/* Edit Item Modal */}
-      <Modal
+      {/* Edit barang — panel kanan */}
+      <RightSidePanel
         isOpen={showEditItemModal}
         onClose={() => {
           setShowEditItemModal(false);
@@ -956,7 +986,8 @@ export default function ItemDetail() {
           setImagePreview("");
         }}
         title="Edit Barang"
-        size="xl"
+        width="xl"
+        titleId="panel-item-edit"
       >
         <div className="space-y-4">
           <div>
@@ -1163,7 +1194,7 @@ export default function ItemDetail() {
             <Button onClick={handleUpdateItem}>Simpan</Button>
           </div>
         </div>
-      </Modal>
+      </RightSidePanel>
     </div>
   );
 }

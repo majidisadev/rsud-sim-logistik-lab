@@ -5,7 +5,7 @@ import api from "../lib/api";
 import { Plus, Edit, Trash2, ArrowDownCircle, Package, Filter } from "lucide-react";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import Modal from "../components/ui/Modal";
+import RightSidePanel from "../components/ui/RightSidePanel";
 import { useAuth } from "../contexts/AuthContext";
 
 export default function BarangMasuk() {
@@ -490,12 +490,13 @@ export default function BarangMasuk() {
         )}
       </div>
 
-      {/* Add Modal */}
-      <Modal
+      {/* Tambah barang masuk — panel kanan */}
+      <RightSidePanel
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         title="Tambah Barang Masuk"
-        size="lg"
+        width="lg"
+        titleId="panel-barang-masuk-add"
       >
         <div className="space-y-4">
           <div>
@@ -634,13 +635,14 @@ export default function BarangMasuk() {
             <Button onClick={handleSubmit}>Simpan</Button>
           </div>
         </div>
-      </Modal>
+      </RightSidePanel>
 
-      {/* Edit Modal */}
-      <Modal
+      {/* Edit barang masuk — panel kanan */}
+      <RightSidePanel
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
         title="Edit Barang Masuk"
+        titleId="panel-barang-masuk-edit"
       >
         <div className="space-y-4">
           <div>
@@ -674,7 +676,7 @@ export default function BarangMasuk() {
             <Button onClick={handleEdit}>Simpan</Button>
           </div>
         </div>
-      </Modal>
+      </RightSidePanel>
     </div>
   );
 }

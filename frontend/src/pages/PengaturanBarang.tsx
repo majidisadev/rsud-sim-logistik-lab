@@ -6,6 +6,7 @@ import anime from "animejs";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import RightSidePanel from "../components/ui/RightSidePanel";
+import * as XLSX from "xlsx";
 
 export default function PengaturanBarang() {
   const navigate = useNavigate();
@@ -30,6 +31,9 @@ export default function PengaturanBarang() {
   const [, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>("");
   const tableBodyRef = useRef<HTMLTableSectionElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const importFileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     fetchItems();
@@ -80,6 +84,169 @@ export default function PengaturanBarang() {
     }
   };
 
+  const handleDownloadTemplate = () => {
+    // Template sesuai requirement import:
+    // - nama barang
+    // - stock
+    const ws = XLSX.utils.aoa_to_sheet([["nama barang", "stock"]]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template");
+    XLSX.writeFile(wb, "template-import-barang.xlsx");
+  };
+
+  const normalizeHeader = (value: any) =>
+    String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ");
+
+  const normalizeName = (value: any) =>
+    String(value || "").trim().toLowerCase();
+
+  const handleImportExcel = async () => {
+    if (!importFile) {
+      alert("Silakan pilih file Excel terlebih dahulu");
+      return;
+    }
+
+    try {
+      setImporting(true);
+
+      const buffer = await importFile.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: "array" });
+
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        alert("File Excel tidak memiliki sheet");
+        return;
+      }
+
+      const firstSheet = workbook.SheetNames[0];
+      const worksheet = workbook.Sheets[firstSheet];
+      const rows = XLSX.utils.sheet_to_json(worksheet, {
+        header: 1,
+        defval: "",
+      }) as any[][];
+
+      if (!rows || rows.length < 2) {
+        alert("Excel harus memiliki header dan minimal 1 baris data");
+        return;
+      }
+
+      const headerRow = (rows[0] || []).map(normalizeHeader);
+      const nameColIndex = headerRow.findIndex((h) => h === "nama barang");
+      const stockColIndex = headerRow.findIndex((h) => h === "stock");
+
+      if (nameColIndex === -1 || stockColIndex === -1) {
+        alert(
+          "Header Excel tidak sesuai. Harus berisi kolom: `nama barang` dan `stock`."
+        );
+        return;
+      }
+
+      const existingNames = new Set(
+        items.map((i) => normalizeName(i?.name)).filter(Boolean),
+      );
+
+      const fileErrors: string[] = [];
+      const payload: Array<{ row: number; name: string; stock: number }> = [];
+      const byNameInFile = new Map<string, number>(); // normalizedName -> rowExcelNumber
+
+      for (let r = 1; r < rows.length; r++) {
+        const row = rows[r];
+        const rowExcelNumber = r + 1; // 1-based including header row
+
+        const rawName = row?.[nameColIndex];
+        const rawStock = row?.[stockColIndex];
+
+        const name =
+          typeof rawName === "string" ? rawName.trim() : String(rawName || "").trim();
+        const stockRawString =
+          typeof rawStock === "string" ? rawStock.trim() : String(rawStock ?? "").trim();
+
+        const rowIsEmpty =
+          (!name && !stockRawString) || (name === "" && stockRawString === "");
+
+        if (rowIsEmpty) continue;
+
+        if (!name) {
+          fileErrors.push(`Baris ${rowExcelNumber}: nama barang wajib diisi`);
+          continue;
+        }
+
+        if (!stockRawString) {
+          fileErrors.push(`Baris ${rowExcelNumber}: stock wajib diisi`);
+          continue;
+        }
+
+        const stockNumber = parseFloat(stockRawString.replace(",", "."));
+        if (!Number.isFinite(stockNumber)) {
+          fileErrors.push(`Baris ${rowExcelNumber}: stock harus berupa angka`);
+          continue;
+        }
+
+        if (stockNumber < 0) {
+          fileErrors.push(`Baris ${rowExcelNumber}: stock tidak boleh negatif`);
+          continue;
+        }
+
+        if (!Number.isInteger(stockNumber)) {
+          fileErrors.push(`Baris ${rowExcelNumber}: stock harus bilangan bulat`);
+          continue;
+        }
+
+        const normalized = normalizeName(name);
+        const firstRow = byNameInFile.get(normalized);
+        if (firstRow !== undefined) {
+          fileErrors.push(
+            `Duplikasi dalam file: "${name}" (baris ${firstRow} dan ${rowExcelNumber})`
+          );
+          continue;
+        }
+
+        byNameInFile.set(normalized, rowExcelNumber);
+        payload.push({ row: rowExcelNumber, name, stock: stockNumber });
+      }
+
+      if (fileErrors.length > 0) {
+        alert(fileErrors.join("\n"));
+        return;
+      }
+
+      // Validate duplicates against existing items (case-insensitive)
+      const dupErrors: string[] = [];
+      for (const item of payload) {
+        const normalized = normalizeName(item.name);
+        if (existingNames.has(normalized)) {
+          dupErrors.push(
+            `Nama barang sudah ada: "${item.name}" (baris ${item.row})`
+          );
+        }
+      }
+
+      if (dupErrors.length > 0) {
+        alert(dupErrors.join("\n"));
+        return;
+      }
+
+      const res = await api.post("/items/import", { items: payload });
+      alert(
+        `${res.data?.message || "Import berhasil"}: ${
+          res.data?.imported ?? payload.length
+        } barang ditambahkan`
+      );
+
+      await fetchItems();
+
+      setImportFile(null);
+      if (importFileRef.current) importFileRef.current.value = "";
+    } catch (error: any) {
+      alert(error.response?.data?.error || "Gagal mengimport Excel");
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -95,9 +262,26 @@ export default function PengaturanBarang() {
   };
 
   const handleSubmit = async () => {
+    const normalizedName = form.name.trim().toLowerCase();
+    if (!normalizedName) {
+      alert("Nama barang wajib diisi");
+      return;
+    }
+
+    // Client-side duplicate check (server tetap validasi juga)
+    const isDuplicate = items.some((i) => {
+      const itemName = (i?.name || "").trim().toLowerCase();
+      return itemName === normalizedName;
+    });
+    if (isDuplicate) {
+      alert("Nama barang sudah ada");
+      return;
+    }
+
     try {
       await api.post("/items", {
         ...form,
+        name: form.name.trim(),
         image: form.image || undefined,
         category_id: form.category_id ? parseInt(form.category_id) : undefined,
         suppliers: form.suppliers
@@ -168,14 +352,56 @@ export default function PengaturanBarang() {
               Kelola daftar barang, kategori, dan stok minimum.
             </p>
           </div>
-          <Button
-            onClick={() => setShowPanel(true)}
-            className="shadow-sm"
-            aria-label="Tambah barang baru"
-          >
-            <Plus className="w-4 h-4 mr-2" aria-hidden />
-            Tambah Barang
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleDownloadTemplate}
+              disabled={importing || loading}
+              aria-label="Download template Excel"
+            >
+              Download Template Excel
+            </Button>
+
+            <input
+              ref={importFileRef}
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={(e) => {
+                setImportFile(e.target.files?.[0] || null);
+              }}
+              aria-label="Pilih file Excel"
+            />
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => importFileRef.current?.click()}
+              disabled={importing || loading}
+              aria-label="Pilih file Excel untuk import"
+            >
+              Pilih Excel
+            </Button>
+
+            <Button
+              size="sm"
+              onClick={handleImportExcel}
+              disabled={!importFile || importing || loading}
+              aria-label="Import Excel"
+            >
+              {importing ? "Mengimpor..." : "Import"}
+            </Button>
+
+            <Button
+              onClick={() => setShowPanel(true)}
+              className="shadow-sm"
+              aria-label="Tambah barang baru"
+            >
+              <Plus className="w-4 h-4 mr-2" aria-hidden />
+              Tambah Barang
+            </Button>
+          </div>
         </div>
       </section>
 
@@ -307,8 +533,7 @@ export default function PengaturanBarang() {
                           onClick={() => navigate(`/barang/${item.id}`)}
                           aria-label={`Lihat detail ${item.name}`}
                         >
-                          <Eye className="w-4 h-4 mr-1" aria-hidden />
-                          Detail
+                          <Eye className="w-4 h-4" aria-hidden />
                         </Button>
                         {item.status === "Active" ? (
                           <Button
@@ -317,8 +542,7 @@ export default function PengaturanBarang() {
                             onClick={() => handleToggleStatus(item.id)}
                             aria-label={`Nonaktifkan ${item.name}`}
                           >
-                            <Power className="w-4 h-4 mr-1" aria-hidden />
-                            Nonaktifkan
+                            <Power className="w-4 h-4" aria-hidden />
                           </Button>
                         ) : (
                           <Button
@@ -327,8 +551,7 @@ export default function PengaturanBarang() {
                             onClick={() => handleToggleStatus(item.id)}
                             aria-label={`Aktifkan ${item.name}`}
                           >
-                            <Power className="w-4 h-4 mr-1" aria-hidden />
-                            Aktifkan
+                            <Power className="w-4 h-4" aria-hidden />
                           </Button>
                         )}
                       </div>

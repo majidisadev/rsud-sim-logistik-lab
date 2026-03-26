@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useRef, useCallback, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import anime from "animejs";
 import { cn } from "../../lib/utils";
@@ -14,11 +15,13 @@ interface RightSidePanelProps {
 }
 
 const WIDTH_MAP = {
-  sm: "28rem",
-  md: "32rem",
-  lg: "42rem",
-  xl: "52rem",
-  full: "100%",
+  // Semua variasi width dibuat seragam: 1/3 dari lebar window
+  // (drawer kiri/kanan tetap nempel ke sisi kanan via CSS `fixed inset-y-0 right-0`).
+  sm: "33.333vw",
+  md: "33.333vw",
+  lg: "33.333vw",
+  xl: "33.333vw",
+  full: "33.333vw",
 };
 
 export default function RightSidePanel({
@@ -110,24 +113,22 @@ export default function RightSidePanel({
     if (e.target === e.currentTarget) runCloseAnimation();
   };
 
-  return (
+  return createPortal(
+    (
     <div
       ref={overlayRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      className="fixed inset-0 z-50 flex justify-end"
+      className="fixed inset-0 z-50 flex justify-end items-stretch"
       onClick={handleOverlayClick}
     >
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
-        aria-hidden="true"
-      />
+      <div className="absolute inset-0 bg-transparent" aria-hidden="true" />
       <div
         ref={panelRef}
         style={{ width: WIDTH_MAP[width], maxWidth: "100vw" }}
         className={cn(
-          "relative flex flex-col h-full bg-white shadow-2xl",
+          "fixed inset-y-0 right-0 flex flex-col h-full bg-white shadow-xl rounded-l-lg",
           "border-l border-gray-200/80",
         )}
         onClick={(e) => e.stopPropagation()}
@@ -153,5 +154,7 @@ export default function RightSidePanel({
         </div>
       </div>
     </div>
+    ),
+    document.body,
   );
 }
