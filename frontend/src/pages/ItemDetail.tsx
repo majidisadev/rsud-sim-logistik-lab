@@ -1,11 +1,21 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import anime from "animejs";
 import api from "../lib/api";
-import { ArrowLeft, Edit, Plus, Filter, X, Package } from "lucide-react";
+import {
+  ArrowLeft,
+  Edit,
+  Plus,
+  Filter,
+  X,
+  Package,
+  Printer,
+} from "lucide-react";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import RightSidePanel from "../components/ui/RightSidePanel";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 import {
   LineChart,
   Line,
@@ -24,6 +34,7 @@ export default function ItemDetail() {
   const { user } = useAuth();
   const [item, setItem] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [isPrintingStockCard, setIsPrintingStockCard] = useState(false);
   const [showLotModal, setShowLotModal] = useState(false);
   const [showEditLotModal, setShowEditLotModal] = useState(false);
   const [showEditItemModal, setShowEditItemModal] = useState(false);
@@ -34,6 +45,11 @@ export default function ItemDetail() {
     stock: 0,
   });
   const [allTransactions, setAllTransactions] = useState<any[]>([]);
+  // Store full (unfiltered) transaction history to calculate "Sisa"
+  // even when the visible table is filtered.
+  const [allTransactionsForBalance, setAllTransactionsForBalance] = useState<
+    any[]
+  >([]);
   const [transactionFilter, setTransactionFilter] = useState({
     type: "",
     start_date: "",
@@ -74,7 +90,7 @@ export default function ItemDetail() {
   useEffect(() => {
     if (id) {
       fetchItem();
-      fetchTransactions();
+      fetchAllTransactionsForBalanceAndVisible();
       fetchMonthlyStats();
       fetchSuppliers();
       fetchCategories();
@@ -152,6 +168,17 @@ export default function ItemDetail() {
     }
   };
 
+  const fetchAllTransactionsForBalanceAndVisible = async () => {
+    try {
+      if (!id) return;
+      const res = await api.get("/transactions", { params: { item_id: id } });
+      setAllTransactions(res.data);
+      setAllTransactionsForBalance(res.data);
+    } catch (error) {
+      console.error("Error fetching all transactions:", error);
+    }
+  };
+
   const fetchTransactions = async (filter?: {
     type: string;
     start_date: string;
@@ -171,6 +198,31 @@ export default function ItemDetail() {
     }
   };
 
+  const sisaByTransactionId = useMemo(() => {
+    if (!allTransactionsForBalance?.length) return new Map<number, number>();
+    if (item?.total_stock === undefined || item?.total_stock === null)
+      return new Map<number, number>();
+
+    // Backend returns transactions in DESC order (newest first).
+    // `item.total_stock` is the stock after the newest transaction.
+    // For each row:
+    // sisa(tx_i) = currentStock - sum(deltas of transactions newer than tx_i)
+    const currentStock = Number(item.total_stock) || 0;
+    let newerDeltaSum = 0;
+    const map = new Map<number, number>();
+
+    for (const tx of allTransactionsForBalance) {
+      const txId = Number(tx.id);
+      const qty = Number(tx.quantity) || 0;
+      const delta = tx.type === "Masuk" ? qty : -qty;
+
+      map.set(txId, currentStock - newerDeltaSum);
+      newerDeltaSum += delta;
+    }
+
+    return map;
+  }, [item?.total_stock, allTransactionsForBalance]);
+
   const handleApplyFilter = () => {
     setTransactionFilter({ ...tempFilter });
     fetchTransactions(tempFilter);
@@ -181,6 +233,209 @@ export default function ItemDetail() {
     setTempFilter(emptyFilter);
     setTransactionFilter(emptyFilter);
     fetchTransactions(emptyFilter);
+  };
+
+  const formatDateDDMMYY = (d: Date) => {
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yy = String(d.getFullYear()).slice(-2);
+    return `${dd}/${mm}/${yy}`;
+  };
+
+  const safeFilePart = (s: string) =>
+    (s || "")
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/\s+/g, " ")
+      .slice(0, 80);
+
+  const loadImageDataUrl = async (url: string) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error("Failed to read image blob"));
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  };
+
+  const handlePrintStockCard = async () => {
+    if (!item) return;
+    setIsPrintingStockCard(true);
+    try {
+      const activeDateFilter =
+        transactionFilter.start_date || transactionFilter.end_date
+          ? transactionFilter
+          : tempFilter;
+
+      const start = activeDateFilter.start_date
+        ? new Date(`${activeDateFilter.start_date}T00:00:00`)
+        : null;
+      const end = activeDateFilter.end_date
+        ? new Date(`${activeDateFilter.end_date}T23:59:59`)
+        : null;
+
+      const filtered = (allTransactionsForBalance || [])
+        // Always include both Masuk + Keluar; ignore type filter for PDF.
+        .filter((tx: any) => {
+          const dt = new Date(tx.created_at);
+          if (start && dt < start) return false;
+          if (end && dt > end) return false;
+          return true;
+        })
+        .slice()
+        .sort(
+          (a: any, b: any) =>
+            new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+        );
+
+      const doc = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const marginX = 14;
+      const pageBorderInset = 8;
+      const drawPageBorder = () => {
+        doc.setDrawColor(0);
+        doc.setLineWidth(0.8);
+        doc.rect(
+          pageBorderInset,
+          pageBorderInset,
+          pageW - pageBorderInset * 2,
+          pageH - pageBorderInset * 2,
+        );
+      };
+
+      drawPageBorder();
+
+      // Logo (opsional). Letakkan file di `frontend/public/logo.png`.
+      const logoUrl = "/logo.png";
+      const logoDataUrl = await loadImageDataUrl(logoUrl);
+      if (logoDataUrl) {
+        // x/y/w/h dalam mm — y disesuaikan agar logo lebih sejajar vertikal dengan blok teks kop
+        const logoSizeMm = 18;
+        const logoYMm = 12;
+        doc.addImage(logoDataUrl, "PNG", marginX, logoYMm, logoSizeMm, logoSizeMm);
+      }
+
+      // Header / Kop (match the attached stock card template text)
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(12);
+      doc.text("PEMERINTAH KOTA SERANG", pageW / 2, 14, { align: "center" });
+      doc.text("RSUD KOTA SERANG", pageW / 2, 20, { align: "center" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(
+        "Jl. Raya Jakarta Km.4 Lingkungan Kp. Baru RT.02/RW.11.",
+        pageW / 2,
+        26,
+        { align: "center" },
+      );
+      doc.text("Serang-Banten Telp.(0254)7932007", pageW / 2, 31, {
+        align: "center",
+      });
+
+      doc.setLineWidth(0.6);
+      doc.line(marginX, 35, pageW - marginX, 35);
+      doc.setLineWidth(0.2);
+      doc.line(marginX, 36.5, pageW - marginX, 36.5);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13);
+      doc.text("KARTU STOK", pageW / 2, 48, { align: "center" });
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      const labelX = marginX;
+      const valueX = marginX + 34;
+      doc.text("Nama Barang", labelX, 58);
+      doc.text(":", valueX - 4, 58);
+      doc.text(String(item.name || "-"), valueX, 58);
+      doc.text("Satuan", labelX, 65);
+      doc.text(":", valueX - 4, 65);
+      doc.text(String(item.unit || "-"), valueX, 65);
+
+      const body = filtered.map((tx: any) => {
+        const d = new Date(tx.created_at);
+        const qty = Number(tx.quantity) || 0;
+        const masuk = tx.type === "Masuk" ? String(qty) : "";
+        const keluar = tx.type === "Keluar" ? String(qty) : "";
+        const sisa = sisaByTransactionId.get(Number(tx.id));
+        return [
+          formatDateDDMMYY(d),
+          tx.notes || "",
+          masuk,
+          keluar,
+          sisa === undefined ? "" : String(sisa),
+          tx.user_name || "",
+        ];
+      });
+
+      (doc as any).autoTable({
+        startY: 72,
+        head: [["Tgl", "keterangan", "Masuk", "Keluar", "Sisa", "User"]],
+        body,
+        theme: "grid",
+        tableLineWidth: 0.6,
+        tableLineColor: 0,
+        styles: {
+          font: "helvetica",
+          fontSize: 9.5,
+          cellPadding: 2,
+          valign: "middle",
+          lineWidth: 0.35,
+          lineColor: 0,
+          textColor: [0, 0, 0],
+          fillColor: [255, 255, 255],
+        },
+        bodyStyles: {
+          textColor: [0, 0, 0],
+          fillColor: [255, 255, 255],
+        },
+        headStyles: {
+          fillColor: [245, 245, 245],
+          textColor: [0, 0, 0],
+          fontStyle: "bold",
+          lineWidth: 0.6,
+          lineColor: 0,
+        },
+        columnStyles: {
+          0: { cellWidth: 22 }, // Tgl
+          1: { cellWidth: 58 }, // keterangan
+          2: { cellWidth: 18, halign: "center" }, // Masuk
+          3: { cellWidth: 18, halign: "center" }, // Keluar
+          4: { cellWidth: 18, halign: "center" }, // Sisa
+          5: { cellWidth: 48 }, // User (fill remaining width; avoid right empty space)
+        },
+        margin: { left: marginX, right: marginX },
+        didDrawPage: () => {
+          drawPageBorder();
+        },
+      });
+
+      const datePart =
+        activeDateFilter.start_date || activeDateFilter.end_date
+          ? `${activeDateFilter.start_date || "awal"}_sd_${activeDateFilter.end_date || "akhir"}`
+          : "semua-tanggal";
+      doc.save(
+        `kartu-stok_${safeFilePart(item.name || "barang")}_${safeFilePart(datePart)}.pdf`,
+      );
+    } catch (e) {
+      console.error("Error printing stock card PDF:", e);
+      alert("Gagal mencetak kartu stok");
+    } finally {
+      setIsPrintingStockCard(false);
+    }
   };
 
   const fetchMonthlyStats = async () => {
@@ -403,12 +658,16 @@ export default function ItemDetail() {
   const txStart = (currentPage - 1) * itemsPerPage;
   const txCount = Math.min(
     itemsPerPage,
-    Math.max(0, allTransactions.length - txStart)
+    Math.max(0, allTransactions.length - txStart),
   );
 
   if (loading) {
     return (
-      <div className="space-y-6 animate-fade-in" role="status" aria-live="polite">
+      <div
+        className="space-y-6 animate-fade-in"
+        role="status"
+        aria-live="polite"
+      >
         <div className="h-10 w-32 rounded-lg bg-muted animate-pulse" />
         <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
           <div className="h-48 md:h-64 bg-muted animate-pulse" />
@@ -417,7 +676,10 @@ export default function ItemDetail() {
             <div className="h-4 w-full bg-muted rounded animate-pulse" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[...Array(8)].map((_, i) => (
-                <div key={i} className="h-16 bg-muted rounded-lg animate-pulse" />
+                <div
+                  key={i}
+                  className="h-16 bg-muted rounded-lg animate-pulse"
+                />
               ))}
             </div>
           </div>
@@ -514,7 +776,9 @@ export default function ItemDetail() {
               <dl className="grid grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                   <dt className="text-sm text-muted-foreground">Kategori</dt>
-                  <dd className="font-medium mt-0.5">{item.category_name || "-"}</dd>
+                  <dd className="font-medium mt-0.5">
+                    {item.category_name || "-"}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-sm text-muted-foreground">Expiration</dt>
@@ -526,7 +790,9 @@ export default function ItemDetail() {
                     }`}
                   >
                     {item.expiration_date
-                      ? new Date(item.expiration_date).toLocaleDateString("id-ID")
+                      ? new Date(item.expiration_date).toLocaleDateString(
+                          "id-ID",
+                        )
                       : "-"}
                   </dd>
                 </div>
@@ -544,10 +810,14 @@ export default function ItemDetail() {
                 </div>
                 <div>
                   <dt className="text-sm text-muted-foreground">Suhu</dt>
-                  <dd className="font-medium mt-0.5">{item.temperature || "-"}</dd>
+                  <dd className="font-medium mt-0.5">
+                    {item.temperature || "-"}
+                  </dd>
                 </div>
                 <div>
-                  <dt className="text-sm text-muted-foreground">Opname Terakhir</dt>
+                  <dt className="text-sm text-muted-foreground">
+                    Opname Terakhir
+                  </dt>
                   <dd className="font-medium mt-0.5">
                     {item.last_opname_date
                       ? new Date(item.last_opname_date).toLocaleDateString(
@@ -674,33 +944,33 @@ export default function ItemDetail() {
       >
         <div className="p-6">
           <h2 id="chart-heading" className="text-xl font-semibold mb-6">
-            Grafik Stok Bulanan
+            Grafik Transaksi Bulanan
           </h2>
           <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={monthlyStats}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="month" />
-            <YAxis />
-            <Tooltip />
-            <Legend />
-            <Line
-              type="monotone"
-              dataKey="Masuk"
-              stroke="#3b82f6"
-              strokeWidth={2}
-              name="Barang Masuk"
-              dot
-            />
-            <Line
-              type="monotone"
-              dataKey="Keluar"
-              stroke="#ef4444"
-              strokeWidth={2}
-              name="Barang Keluar"
-              dot
-            />
-          </LineChart>
-        </ResponsiveContainer>
+            <LineChart data={monthlyStats}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Line
+                type="monotone"
+                dataKey="Masuk"
+                stroke="#3b82f6"
+                strokeWidth={2}
+                name="Barang Masuk"
+                dot
+              />
+              <Line
+                type="monotone"
+                dataKey="Keluar"
+                stroke="#ef4444"
+                strokeWidth={2}
+                name="Barang Keluar"
+                dot
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </section>
 
@@ -743,13 +1013,18 @@ export default function ItemDetail() {
                   type="date"
                   value={tempFilter.start_date}
                   onChange={(e) => {
-                    setTempFilter({ ...tempFilter, start_date: e.target.value });
+                    setTempFilter({
+                      ...tempFilter,
+                      start_date: e.target.value,
+                    });
                   }}
                   placeholder="Tanggal Mulai"
                   className="min-w-[160px]"
                   aria-label="Tanggal mulai filter"
                 />
-                <span className="text-muted-foreground" aria-hidden>-</span>
+                <span className="text-muted-foreground" aria-hidden>
+                  -
+                </span>
                 <Input
                   type="date"
                   value={tempFilter.end_date}
@@ -767,9 +1042,25 @@ export default function ItemDetail() {
                 <Filter className="w-4 h-4 mr-2" aria-hidden />
                 Filter
               </Button>
-              <Button variant="outline" onClick={handleResetFilter} aria-label="Reset filter">
+              <Button
+                variant="outline"
+                onClick={handleResetFilter}
+                aria-label="Reset filter"
+              >
                 <X className="w-4 h-4 mr-2" aria-hidden />
                 Reset
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handlePrintStockCard}
+                disabled={loading || !item || isPrintingStockCard}
+                aria-label="Cetak kartu stok"
+              >
+                <Printer
+                  className={`w-4 h-4 mr-2 ${isPrintingStockCard ? "animate-pulse" : ""}`}
+                  aria-hidden
+                />
+                {isPrintingStockCard ? "Mencetak..." : "Cetak Kartu Stok"}
               </Button>
             </div>
             <div className="ml-auto flex flex-col gap-1">
@@ -797,18 +1088,31 @@ export default function ItemDetail() {
             <table className="w-full" role="table">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-foreground">In/Out</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Tanggal</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-foreground">User</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Jumlah</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Keterangan</th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-foreground">
+                    In/Out
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-foreground">
+                    Tanggal
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-foreground">
+                    User
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-foreground">
+                    Jumlah
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-foreground">
+                    Sisa
+                  </th>
+                  <th className="px-4 py-3 text-left text-sm font-medium text-foreground">
+                    Keterangan
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border bg-card">
                 {paginatedTransactions.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="px-4 py-12 text-center text-muted-foreground"
                     >
                       Tidak ada data transaksi
@@ -836,11 +1140,16 @@ export default function ItemDetail() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {new Date(tx.created_at).toLocaleString("id-ID")}
+                        {new Date(tx.created_at).toLocaleDateString("id-ID")}
                       </td>
                       <td className="px-4 py-3">{tx.user_name}</td>
                       <td className="px-4 py-3 font-medium">{tx.quantity}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{tx.notes || "-"}</td>
+                      <td className="px-4 py-3 font-medium">
+                        {sisaByTransactionId.get(Number(tx.id)) ?? "-"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {tx.notes || "-"}
+                      </td>
                     </tr>
                   ))
                 )}
@@ -850,22 +1159,30 @@ export default function ItemDetail() {
           {/* Pagination Controls */}
           {allTransactions.length > 0 && (
             <div className="mt-6 pt-4 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-sm text-muted-foreground">
-              Menampilkan {startIndex + 1} sampai{" "}
-              {Math.min(endIndex, allTransactions.length)} dari{" "}
-              {allTransactions.length} data
-            </div>
-              <nav className="flex items-center gap-2" aria-label="Navigasi halaman">
+              <div className="text-sm text-muted-foreground">
+                Menampilkan {startIndex + 1} sampai{" "}
+                {Math.min(endIndex, allTransactions.length)} dari{" "}
+                {allTransactions.length} data
+              </div>
+              <nav
+                className="flex items-center gap-2"
+                aria-label="Navigasi halaman"
+              >
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.max(1, prev - 1))
+                  }
                   disabled={currentPage === 1}
                   aria-label="Halaman sebelumnya"
                 >
                   Sebelumnya
                 </Button>
-                <span className="text-sm text-muted-foreground" aria-live="polite">
+                <span
+                  className="text-sm text-muted-foreground"
+                  aria-live="polite"
+                >
                   Halaman {currentPage} dari {totalPages}
                 </span>
                 <Button
