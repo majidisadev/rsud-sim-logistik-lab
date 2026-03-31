@@ -51,16 +51,18 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
     <>
       {/* Overlay for mobile */}
       {open && (
-        <div
+        <button
+          type="button"
           className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={onClose}
+          aria-label="Tutup menu navigasi"
         />
       )}
 
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed md:static inset-y-0 left-0 z-50 bg-white border-r border-gray-200 transform transition-all duration-300 ease-in-out md:translate-x-0',
+          'fixed md:static inset-y-0 left-0 z-50 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out md:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full',
           collapsed ? 'w-16 md:w-16' : 'w-64'
         )}
@@ -73,18 +75,26 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
           )}>
             {onToggleCollapse && (
               <button
+                type="button"
                 onClick={onToggleCollapse}
-                className="hidden md:flex p-1 hover:bg-gray-100 rounded transition-colors"
+                className="hidden md:flex p-1 hover:bg-gray-100 rounded transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 title={collapsed ? 'Expand' : 'Collapse'}
+                aria-label={collapsed ? "Perluas sidebar" : "Ciutkan sidebar"}
               >
-                {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+                {collapsed ? (
+                  <ChevronRight className="w-5 h-5" aria-hidden="true" />
+                ) : (
+                  <ChevronLeft className="w-5 h-5" aria-hidden="true" />
+                )}
               </button>
             )}
             <button
+              type="button"
               onClick={onClose}
-              className="md:hidden p-1 hover:bg-gray-100 rounded"
+              className="md:hidden p-1 hover:bg-gray-100 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+              aria-label="Tutup menu navigasi"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
 
@@ -106,8 +116,9 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
                       : 'text-gray-700 hover:bg-gray-100'
                   )}
                   title={collapsed ? item.label : undefined}
+                  aria-current={isActive ? "page" : undefined}
                 >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
+                  <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                   {!collapsed && <span>{item.label}</span>}
                 </Link>
               );
@@ -139,8 +150,9 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
                           : 'text-gray-700 hover:bg-gray-100'
                       )}
                       title={collapsed ? item.label : undefined}
+                      aria-current={isActive ? "page" : undefined}
                     >
-                      <Icon className="w-5 h-5 flex-shrink-0" />
+                      <Icon className="w-5 h-5 flex-shrink-0" aria-hidden="true" />
                       {!collapsed && <span>{item.label}</span>}
                     </Link>
                   );

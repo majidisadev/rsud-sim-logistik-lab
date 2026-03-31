@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "../config/database";
 import { requireRole } from "../middleware/auth";
+import { isNullableHttpUrl } from "../utils/imageUrl";
 
 const router = express.Router();
 
@@ -201,6 +202,12 @@ router.post("/", requireRole("Admin"), async (req, res) => {
       image,
       suppliers,
     } = req.body;
+
+    if (!isNullableHttpUrl(image)) {
+      return res
+        .status(400)
+        .json({ error: "Gambar harus berupa URL (http/https)" });
+    }
 
     const normalizedName =
       typeof name === "string" ? name.trim() : (null as any);
@@ -479,6 +486,12 @@ router.put("/:id", requireRole("Admin", "PJ Gudang"), async (req, res) => {
       image,
       suppliers,
     } = req.body;
+
+    if (image !== undefined && !isNullableHttpUrl(image)) {
+      return res
+        .status(400)
+        .json({ error: "Gambar harus berupa URL (http/https)" });
+    }
 
     const normalizedName =
       typeof name === "string" ? name.trim() : (undefined as any);

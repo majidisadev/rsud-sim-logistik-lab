@@ -30,14 +30,16 @@ export default function Header({ onMenuClick }: HeaderProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <button
+            type="button"
             onClick={onMenuClick}
-            className="md:hidden p-2 hover:bg-gray-100 rounded-lg"
+            className="md:hidden p-2 hover:bg-gray-100 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            aria-label="Buka menu navigasi"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="w-5 h-5" aria-hidden="true" />
           </button>
           <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <Package className="w-5 h-5 text-white" />
+              <Package className="w-5 h-5 text-white" aria-hidden="true" />
             </div>
             <h1 className="text-xl font-bold">SIM Logistik Lab</h1>
           </div>
@@ -49,10 +51,12 @@ export default function Header({ onMenuClick }: HeaderProps) {
             <span className="text-xs text-gray-500">{getRoleLabel(user?.role || '')}</span>
           </div>
           <button
+            type="button"
             onClick={handleLogout}
             className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-label="Logout"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-4 h-4" aria-hidden="true" />
             <span className="hidden md:inline">Logout</span>
           </button>
         </div>

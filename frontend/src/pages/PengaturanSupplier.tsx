@@ -1,14 +1,20 @@
 import { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import api from "../lib/api";
 import { Plus, Edit, Trash2, Eye, Truck, Inbox } from "lucide-react";
 import anime from "animejs";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import RightSidePanel from "../components/ui/RightSidePanel";
+import Dialog from "../components/ui/Dialog";
+import { useToast } from "../components/ui/toast";
+import { useConfirmDialog } from "../components/ui/confirm-dialog";
+import { getErrorMessage } from "../lib/getErrorMessage";
+import { usePrefersReducedMotion } from "../lib/hooks/usePrefersReducedMotion";
 
 export default function PengaturanSupplier() {
-  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { confirm, dialog } = useConfirmDialog();
+  const reduceMotion = usePrefersReducedMotion();
   const [suppliers, setSuppliers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
@@ -27,6 +33,7 @@ export default function PengaturanSupplier() {
   }, []);
 
   useEffect(() => {
+    if (reduceMotion) return;
     if (loading || suppliers.length === 0 || !tableBodyRef.current) return;
     const rows = tableBodyRef.current.querySelectorAll("tr");
     if (rows.length === 0) return;
@@ -38,7 +45,7 @@ export default function PengaturanSupplier() {
       duration: 360,
       easing: "easeOutCubic",
     });
-  }, [loading, suppliers]);
+  }, [loading, suppliers, reduceMotion]);
 
   const fetchSuppliers = async () => {
     try {
@@ -57,8 +64,13 @@ export default function PengaturanSupplier() {
       setShowPanel(false);
       setForm({ name: "", email: "", phone: "", cover_image: "" });
       fetchSuppliers();
+      toast({ variant: "success", title: "Supplier berhasil ditambahkan" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error creating supplier");
+      toast({
+        variant: "error",
+        title: "Gagal menambahkan supplier",
+        description: getErrorMessage(error, "Error creating supplier"),
+      });
     }
   };
 
@@ -69,23 +81,41 @@ export default function PengaturanSupplier() {
       setSelectedSupplier(null);
       setForm({ name: "", email: "", phone: "", cover_image: "" });
       fetchSuppliers();
+      toast({ variant: "success", title: "Supplier berhasil diperbarui" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error updating supplier");
+      toast({
+        variant: "error",
+        title: "Gagal memperbarui supplier",
+        description: getErrorMessage(error, "Error updating supplier"),
+      });
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Hapus supplier ini?")) return;
+    const ok = await confirm({
+      title: "Hapus supplier?",
+      description: "Tindakan ini tidak bisa dibatalkan.",
+      confirmText: "Ya, hapus",
+      cancelText: "Batal",
+      variant: "destructive",
+    });
+    if (!ok) return;
     try {
       await api.delete(`/suppliers/${id}`);
       fetchSuppliers();
+      toast({ variant: "success", title: "Supplier berhasil dihapus" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error deleting supplier");
+      toast({
+        variant: "error",
+        title: "Gagal menghapus supplier",
+        description: getErrorMessage(error, "Error deleting supplier"),
+      });
     }
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {dialog}
       <section aria-labelledby="page-title">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -193,17 +223,14 @@ export default function PengaturanSupplier() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            navigate(`/pengaturan/supplier/${supplier.id}`)
-                          }
+                        <Link
+                          to={`/pengaturan/supplier/${supplier.id}`}
                           aria-label={`Lihat detail ${supplier.name}`}
+                          className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         >
                           <Eye className="w-4 h-4 mr-1" aria-hidden />
                           Detail
-                        </Button>
+                        </Link>
                         <Button
                           size="sm"
                           variant="outline"
@@ -241,12 +268,12 @@ export default function PengaturanSupplier() {
         </div>
       </div>
 
-      <RightSidePanel
-        isOpen={showPanel}
+      <Dialog
+        open={showPanel}
         onClose={() => setShowPanel(false)}
         title="Tambah Supplier"
-        width="md"
         titleId="panel-tambah-supplier"
+        size="md"
       >
         <div className="space-y-5">
           <div>
@@ -258,11 +285,13 @@ export default function PengaturanSupplier() {
             </label>
             <Input
               id="supplier-name"
+              name="supplier_name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
               placeholder="Nama perusahaan / pemasok"
               aria-required="true"
+              autoComplete="off"
             />
           </div>
           <div>
@@ -275,9 +304,12 @@ export default function PengaturanSupplier() {
             <Input
               id="supplier-email"
               type="email"
+              name="supplier_email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               placeholder="email@supplier.com"
+              autoComplete="off"
+              spellCheck={false}
             />
           </div>
           <div>
@@ -289,9 +321,13 @@ export default function PengaturanSupplier() {
             </label>
             <Input
               id="supplier-phone"
+              type="tel"
+              inputMode="tel"
+              name="supplier_phone"
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
               placeholder="08xxxxxxxxxx"
+              autoComplete="off"
             />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
@@ -301,18 +337,18 @@ export default function PengaturanSupplier() {
             <Button onClick={handleSubmit}>Simpan</Button>
           </div>
         </div>
-      </RightSidePanel>
+      </Dialog>
 
-      <RightSidePanel
-        isOpen={showEditPanel}
+      <Dialog
+        open={showEditPanel}
         onClose={() => {
           setShowEditPanel(false);
           setSelectedSupplier(null);
           setForm({ name: "", email: "", phone: "", cover_image: "" });
         }}
         title="Edit Supplier"
-        width="md"
         titleId="panel-edit-supplier"
+        size="md"
       >
         <div className="space-y-5">
           <div>
@@ -324,11 +360,13 @@ export default function PengaturanSupplier() {
             </label>
             <Input
               id="supplier-edit-name"
+              name="supplier_name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
               placeholder="Nama perusahaan / pemasok"
               aria-required="true"
+              autoComplete="off"
             />
           </div>
           <div>
@@ -341,9 +379,12 @@ export default function PengaturanSupplier() {
             <Input
               id="supplier-edit-email"
               type="email"
+              name="supplier_email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               placeholder="email@supplier.com"
+              autoComplete="off"
+              spellCheck={false}
             />
           </div>
           <div>
@@ -355,9 +396,13 @@ export default function PengaturanSupplier() {
             </label>
             <Input
               id="supplier-edit-phone"
+              type="tel"
+              inputMode="tel"
+              name="supplier_phone"
               value={form.phone}
               onChange={(e) => setForm({ ...form, phone: e.target.value })}
               placeholder="08xxxxxxxxxx"
+              autoComplete="off"
             />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
@@ -373,7 +418,7 @@ export default function PengaturanSupplier() {
             <Button onClick={handleEdit}>Simpan</Button>
           </div>
         </div>
-      </RightSidePanel>
+      </Dialog>
     </div>
   );
 }

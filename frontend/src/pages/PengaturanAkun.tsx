@@ -4,9 +4,14 @@ import { Plus, Edit, UserPlus, Inbox } from "lucide-react";
 import anime from "animejs";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import RightSidePanel from "../components/ui/RightSidePanel";
+import Dialog from "../components/ui/Dialog";
+import { useToast } from "../components/ui/toast";
+import { getErrorMessage } from "../lib/getErrorMessage";
+import { usePrefersReducedMotion } from "../lib/hooks/usePrefersReducedMotion";
 
 export default function PengaturanAkun() {
+  const { toast } = useToast();
+  const reduceMotion = usePrefersReducedMotion();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
@@ -25,6 +30,7 @@ export default function PengaturanAkun() {
   }, []);
 
   useEffect(() => {
+    if (reduceMotion) return;
     if (loading || users.length === 0 || !tableBodyRef.current) return;
     const rows = tableBodyRef.current.querySelectorAll("tr");
     if (rows.length === 0) return;
@@ -36,7 +42,7 @@ export default function PengaturanAkun() {
       duration: 360,
       easing: "easeOutCubic",
     });
-  }, [loading, users]);
+  }, [loading, users, reduceMotion]);
 
   const fetchUsers = async () => {
     try {
@@ -58,8 +64,13 @@ export default function PengaturanAkun() {
       setShowPanel(false);
       setForm({ username: "", password: "", role: "User", status: "Active" });
       fetchUsers();
+      toast({ variant: "success", title: "Akun berhasil ditambahkan" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error creating user");
+      toast({
+        variant: "error",
+        title: "Gagal menambahkan akun",
+        description: getErrorMessage(error, "Error creating user"),
+      });
     }
   };
 
@@ -75,8 +86,13 @@ export default function PengaturanAkun() {
       setSelectedUser(null);
       setForm({ username: "", password: "", role: "User", status: "Active" });
       fetchUsers();
+      toast({ variant: "success", title: "Akun berhasil diperbarui" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error updating user");
+      toast({
+        variant: "error",
+        title: "Gagal memperbarui akun",
+        description: getErrorMessage(error, "Error updating user"),
+      });
     }
   };
 
@@ -225,12 +241,12 @@ export default function PengaturanAkun() {
         </div>
       </div>
 
-      <RightSidePanel
-        isOpen={showPanel}
+      <Dialog
+        open={showPanel}
         onClose={() => setShowPanel(false)}
         title="Tambah Akun"
-        width="md"
         titleId="panel-tambah-akun"
+        size="md"
       >
         <div className="space-y-5">
           <div>
@@ -242,11 +258,13 @@ export default function PengaturanAkun() {
             </label>
             <Input
               id="akun-username"
+              name="username"
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
               required
               placeholder="Nama pengguna login"
               aria-required="true"
+              autoComplete="off"
             />
           </div>
           <div>
@@ -259,11 +277,13 @@ export default function PengaturanAkun() {
             <Input
               id="akun-password"
               type="password"
+              name="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               required
               placeholder="Minimal 6 karakter"
               aria-required="true"
+              autoComplete="new-password"
             />
           </div>
           <div>
@@ -275,6 +295,7 @@ export default function PengaturanAkun() {
             </label>
             <select
               id="akun-role"
+              name="role"
               value={form.role}
               onChange={(e) => setForm({ ...form, role: e.target.value })}
               className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-900 focus:ring-2 focus:ring-primary/20 focus:border-primary"
@@ -297,6 +318,7 @@ export default function PengaturanAkun() {
             </label>
             <select
               id="akun-status"
+              name="status"
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value })}
               className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-900 focus:ring-2 focus:ring-primary/20 focus:border-primary"
@@ -312,18 +334,18 @@ export default function PengaturanAkun() {
             <Button onClick={handleSubmit}>Simpan</Button>
           </div>
         </div>
-      </RightSidePanel>
+      </Dialog>
 
-      <RightSidePanel
-        isOpen={showEditPanel}
+      <Dialog
+        open={showEditPanel}
         onClose={() => {
           setShowEditPanel(false);
           setSelectedUser(null);
           setForm({ username: "", password: "", role: "User", status: "Active" });
         }}
         title="Edit Akun"
-        width="md"
         titleId="panel-edit-akun"
+        size="md"
       >
         <div className="space-y-5">
           <div>
@@ -335,11 +357,13 @@ export default function PengaturanAkun() {
             </label>
             <Input
               id="akun-edit-username"
+              name="username"
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
               required
               placeholder="Nama pengguna login"
               aria-required="true"
+              autoComplete="off"
             />
           </div>
           <div>
@@ -355,9 +379,11 @@ export default function PengaturanAkun() {
             <Input
               id="akun-edit-password"
               type="password"
+              name="new_password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               placeholder="••••••••"
+              autoComplete="new-password"
             />
           </div>
           <div>
@@ -369,6 +395,7 @@ export default function PengaturanAkun() {
             </label>
             <select
               id="akun-edit-role"
+              name="role"
               value={form.role}
               onChange={(e) => setForm({ ...form, role: e.target.value })}
               className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-900 focus:ring-2 focus:ring-primary/20 focus:border-primary"
@@ -387,6 +414,7 @@ export default function PengaturanAkun() {
             </label>
             <select
               id="akun-edit-status"
+              name="status"
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value })}
               className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-900 focus:ring-2 focus:ring-primary/20 focus:border-primary"
@@ -408,7 +436,7 @@ export default function PengaturanAkun() {
             <Button onClick={handleEdit}>Simpan</Button>
           </div>
         </div>
-      </RightSidePanel>
+      </Dialog>
     </div>
   );
 }

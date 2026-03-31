@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import anime from 'animejs';
 import api from '../lib/api';
 import {
@@ -16,6 +16,10 @@ import {
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../components/ui/toast';
+import { useConfirmDialog } from '../components/ui/confirm-dialog';
+import { getErrorMessage } from '../lib/getErrorMessage';
+import { usePrefersReducedMotion } from '../lib/hooks/usePrefersReducedMotion';
 
 const statusConfig = {
   Disetujui: {
@@ -36,8 +40,10 @@ const statusConfig = {
 };
 
 export default function StockOpname() {
-  const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useToast();
+  const { confirm, dialog } = useConfirmDialog();
+  const reduceMotion = usePrefersReducedMotion();
   const [opnames, setOpnames] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [validatingId, setValidatingId] = useState<number | null>(null);
@@ -53,6 +59,7 @@ export default function StockOpname() {
 
   // Entrance animations
   useEffect(() => {
+    if (reduceMotion) return;
     if (!pageRef.current || !headerRef.current || !tableCardRef.current) return;
     anime({
       targets: pageRef.current,
@@ -77,10 +84,11 @@ export default function StockOpname() {
       delay: 160,
       easing: 'easeOutCubic',
     });
-  }, []);
+  }, [reduceMotion]);
 
   // Stagger table rows when data loads
   useEffect(() => {
+    if (reduceMotion) return;
     if (loading || opnames.length === 0) return;
     rowRefs.current = rowRefs.current.slice(0, opnames.length);
     const targets = rowRefs.current.filter(Boolean);
@@ -93,7 +101,7 @@ export default function StockOpname() {
       delay: anime.stagger(40, { start: 200 }),
       easing: 'easeOutCubic',
     });
-  }, [loading, opnames.length]);
+  }, [loading, opnames.length, reduceMotion]);
 
   const fetchOpnames = async () => {
     try {
@@ -109,13 +117,25 @@ export default function StockOpname() {
 
   const handleValidate = async (id: number, status: 'Disetujui' | 'Tidak Disetujui') => {
     const action = status === 'Disetujui' ? 'menyetujui' : 'menolak';
-    if (!window.confirm(`Yakin ingin ${action} stock opname ini?`)) return;
+    const ok = await confirm({
+      title: `Yakin ingin ${action} stock opname?`,
+      description: 'Tindakan ini akan mengubah status validasi.',
+      confirmText: 'Ya, lanjutkan',
+      cancelText: 'Batal',
+      variant: status === 'Tidak Disetujui' ? 'destructive' : 'default',
+    });
+    if (!ok) return;
     try {
       setValidatingId(id);
       await api.patch(`/stock-opnames/${id}/validate`, { validation_status: status });
       await fetchOpnames();
+      toast({ variant: 'success', title: 'Status validasi diperbarui' });
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Gagal memvalidasi stock opname');
+      toast({
+        variant: 'error',
+        title: 'Gagal memvalidasi stock opname',
+        description: getErrorMessage(error, 'Gagal memvalidasi stock opname'),
+      });
     } finally {
       setValidatingId(null);
     }
@@ -123,6 +143,7 @@ export default function StockOpname() {
 
   return (
     <main ref={pageRef} className="space-y-6" aria-label="Halaman Stock Opname">
+      {dialog}
       <header
         ref={headerRef}
         className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
@@ -138,14 +159,14 @@ export default function StockOpname() {
             Kelola dan validasi hasil stock opname barang
           </p>
         </div>
-        <Button
-          onClick={() => navigate('/stock-opname/new')}
-          className="shrink-0"
+        <Link
+          to="/stock-opname/new"
           aria-label="Tambah stock opname baru"
+          className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
           <Plus className="w-4 h-4 mr-2" aria-hidden />
           Tambah Stock Opname
-        </Button>
+        </Link>
       </header>
 
       <section
@@ -233,15 +254,13 @@ export default function StockOpname() {
                       </div>
                       <p className="font-medium">Belum ada data stock opname</p>
                       <p className="text-sm">Klik &quot;Tambah Stock Opname&quot; untuk mulai</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => navigate('/stock-opname/new')}
-                        className="mt-2"
+                      <Link
+                        to="/stock-opname/new"
+                        className="mt-2 inline-flex h-9 items-center justify-center rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       >
-                        <Plus className="w-4 h-4 mr-2" />
+                        <Plus className="w-4 h-4 mr-2" aria-hidden />
                         Tambah Stock Opname
-                      </Button>
+                      </Link>
                     </div>
                   </td>
                 </tr>
@@ -288,15 +307,14 @@ export default function StockOpname() {
                       </td>
                       <td className="px-4 py-3.5 whitespace-nowrap">
                         <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => navigate(`/stock-opname/${opname.id}`)}
+                          <Link
+                            to={`/stock-opname/${opname.id}`}
                             aria-label={`Lihat detail stock opname ${opname.opname_date}`}
+                            className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                           >
                             <Eye className="w-4 h-4 mr-1.5" aria-hidden />
                             Detail
-                          </Button>
+                          </Link>
                           {user?.role === 'Admin' && opname.validation_status === 'Belum' && (
                             <>
                               <Button

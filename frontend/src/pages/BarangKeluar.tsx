@@ -1,16 +1,22 @@
 import { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import anime from "animejs";
 import api from "../lib/api";
 import { Plus, Edit, Trash2, ArrowUpCircle, Package, Filter } from "lucide-react";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import RightSidePanel from "../components/ui/RightSidePanel";
+import Dialog from "../components/ui/Dialog";
 import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../components/ui/toast";
+import { useConfirmDialog } from "../components/ui/confirm-dialog";
+import { getErrorMessage } from "../lib/getErrorMessage";
+import { usePrefersReducedMotion } from "../lib/hooks/usePrefersReducedMotion";
 
 export default function BarangKeluar() {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { confirm, dialog } = useConfirmDialog();
+  const reduceMotion = usePrefersReducedMotion();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -56,6 +62,7 @@ export default function BarangKeluar() {
 
   // Entrance animations on mount
   useEffect(() => {
+    if (reduceMotion) return;
     if (!pageRef.current || !filterCardRef.current || !tableCardRef.current) return;
     anime({
       targets: pageRef.current,
@@ -80,7 +87,7 @@ export default function BarangKeluar() {
       delay: 180,
       easing: "easeOutCubic",
     });
-  }, []);
+  }, [reduceMotion]);
 
   const fetchTransactions = async () => {
     try {
@@ -138,8 +145,13 @@ export default function BarangKeluar() {
         notes: "",
       });
       fetchTransactions();
+      toast({ variant: "success", title: "Transaksi berhasil ditambahkan" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error creating transaction");
+      toast({
+        variant: "error",
+        title: "Gagal menambahkan transaksi",
+        description: getErrorMessage(error, "Error creating transaction"),
+      });
     }
   };
 
@@ -152,18 +164,35 @@ export default function BarangKeluar() {
       setShowEditModal(false);
       setSelectedTransaction(null);
       fetchTransactions();
+      toast({ variant: "success", title: "Transaksi berhasil diperbarui" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error updating transaction");
+      toast({
+        variant: "error",
+        title: "Gagal memperbarui transaksi",
+        description: getErrorMessage(error, "Error updating transaction"),
+      });
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Hapus transaksi ini?")) return;
+    const ok = await confirm({
+      title: "Hapus transaksi?",
+      description: "Tindakan ini tidak bisa dibatalkan.",
+      confirmText: "Ya, hapus",
+      cancelText: "Batal",
+      variant: "destructive",
+    });
+    if (!ok) return;
     try {
       await api.delete(`/transactions/${id}`);
       fetchTransactions();
+      toast({ variant: "success", title: "Transaksi berhasil dihapus" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error deleting transaction");
+      toast({
+        variant: "error",
+        title: "Gagal menghapus transaksi",
+        description: getErrorMessage(error, "Error deleting transaction"),
+      });
     }
   };
 
@@ -178,6 +207,7 @@ export default function BarangKeluar() {
 
   // Stagger rows when data loads
   useEffect(() => {
+    if (reduceMotion) return;
     if (loading || paginatedTransactions.length === 0) return;
     rowRefs.current = rowRefs.current.slice(0, paginatedTransactions.length);
     const targets = rowRefs.current.filter(Boolean);
@@ -190,10 +220,11 @@ export default function BarangKeluar() {
       delay: anime.stagger(40, { start: 100 }),
       easing: "easeOutCubic",
     });
-  }, [loading, paginatedTransactions.length]);
+  }, [loading, paginatedTransactions.length, reduceMotion]);
 
   return (
     <div ref={pageRef} className="space-y-5" role="main" aria-label="Halaman Barang Keluar">
+      {dialog}
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -207,7 +238,7 @@ export default function BarangKeluar() {
         </div>
         <Button
           onClick={() => setShowModal(true)}
-          className="bg-amber-600 hover:bg-amber-700 text-white shadow-md shadow-amber-500/25 transition-all duration-200 hover:shadow-lg hover:shadow-amber-500/30"
+          className="bg-amber-600 hover:bg-amber-700 text-white shadow-md shadow-amber-500/25 transition-colors duration-200 hover:shadow-lg hover:shadow-amber-500/30"
           aria-label="Tambah transaksi barang keluar baru"
         >
           <Plus className="w-4 h-4 mr-2" aria-hidden />
@@ -274,6 +305,7 @@ export default function BarangKeluar() {
             <Input
               id="filter-start-keluar"
               type="date"
+              name="filter_start_date"
               value={filterStartDate}
               onChange={(e) => setFilterStartDate(e.target.value)}
             />
@@ -285,6 +317,7 @@ export default function BarangKeluar() {
             <Input
               id="filter-end-keluar"
               type="date"
+              name="filter_end_date"
               value={filterEndDate}
               onChange={(e) => setFilterEndDate(e.target.value)}
             />
@@ -381,13 +414,13 @@ export default function BarangKeluar() {
                       {new Date(tx.created_at).toLocaleString("id-ID")}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={() => navigate(`/barang/${tx.item_id}`)}
-                        className="text-amber-700 hover:text-amber-800 hover:underline font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 rounded px-1 -mx-1 transition-colors"
+                      <Link
+                        to={`/barang/${tx.item_id}`}
+                        className="text-amber-700 hover:text-amber-800 hover:underline font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 rounded px-1 -mx-1 transition-colors"
                         aria-label={`Lihat detail ${tx.item_name}`}
                       >
                         {tx.item_name}
-                      </button>
+                      </Link>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {tx.lot_number || "-"}
@@ -489,13 +522,12 @@ export default function BarangKeluar() {
         )}
       </div>
 
-      {/* Tambah barang keluar — panel kanan */}
-      <RightSidePanel
-        isOpen={showModal}
+      <Dialog
+        open={showModal}
         onClose={() => setShowModal(false)}
         title="Tambah Barang Keluar"
-        width="lg"
         titleId="panel-barang-keluar-add"
+        size="lg"
       >
         <div className="space-y-4">
           <div>
@@ -503,6 +535,7 @@ export default function BarangKeluar() {
             <Input
               type="text"
               placeholder="Ketik nama barang..."
+              name="item_search"
               value={itemSearch}
               onChange={(e) => {
                 setItemSearch(e.target.value);
@@ -514,6 +547,8 @@ export default function BarangKeluar() {
                   fetchItems();
                 }
               }}
+              autoComplete="off"
+              data-autofocus
             />
             {itemSearch && (
               <div className="mt-2 overflow-y-auto border border-gray-200 rounded-lg max-h-40">
@@ -542,6 +577,7 @@ export default function BarangKeluar() {
                 <label className="block mb-2 text-sm font-medium">Lot</label>
                 <select
                   value={form.lot_id}
+                  name="lot_id"
                   onChange={(e) => {
                     if (e.target.value === "new") {
                       setForm({
@@ -583,11 +619,13 @@ export default function BarangKeluar() {
                       Nomor Lot
                     </label>
                     <Input
+                      name="lot_number"
                       value={form.lot_number}
                       onChange={(e) =>
                         setForm({ ...form, lot_number: e.target.value })
                       }
                       required
+                      autoComplete="off"
                     />
                   </div>
                   <div>
@@ -596,6 +634,7 @@ export default function BarangKeluar() {
                     </label>
                     <Input
                       type="date"
+                      name="expiration_date"
                       value={form.expiration_date}
                       onChange={(e) =>
                         setForm({ ...form, expiration_date: e.target.value })
@@ -612,10 +651,12 @@ export default function BarangKeluar() {
             </label>
             <Input
               type="number"
+              name="quantity"
               value={form.quantity}
               onChange={(e) => setForm({ ...form, quantity: e.target.value })}
               min="1"
               required
+              inputMode="numeric"
             />
           </div>
           <div>
@@ -623,11 +664,13 @@ export default function BarangKeluar() {
               Keterangan (max 25 karakter)
             </label>
             <Input
+              name="notes"
               value={form.notes}
               onChange={(e) =>
                 setForm({ ...form, notes: e.target.value.substring(0, 25) })
               }
               maxLength={25}
+              autoComplete="off"
             />
           </div>
           <div className="flex justify-end space-x-2">
@@ -637,14 +680,14 @@ export default function BarangKeluar() {
             <Button onClick={handleSubmit}>Simpan</Button>
           </div>
         </div>
-      </RightSidePanel>
+      </Dialog>
 
-      {/* Edit barang keluar — panel kanan */}
-      <RightSidePanel
-        isOpen={showEditModal}
+      <Dialog
+        open={showEditModal}
         onClose={() => setShowEditModal(false)}
         title="Edit Barang Keluar"
         titleId="panel-barang-keluar-edit"
+        size="md"
       >
         <div className="space-y-4">
           <div>
@@ -653,10 +696,12 @@ export default function BarangKeluar() {
             </label>
             <Input
               type="number"
+              name="quantity"
               value={form.quantity}
               onChange={(e) => setForm({ ...form, quantity: e.target.value })}
               min="1"
               required
+              inputMode="numeric"
             />
           </div>
           <div>
@@ -664,11 +709,13 @@ export default function BarangKeluar() {
               Keterangan (max 25 karakter)
             </label>
             <Input
+              name="notes"
               value={form.notes}
               onChange={(e) =>
                 setForm({ ...form, notes: e.target.value.substring(0, 25) })
               }
               maxLength={25}
+              autoComplete="off"
             />
           </div>
           <div className="flex justify-end space-x-2">
@@ -678,7 +725,7 @@ export default function BarangKeluar() {
             <Button onClick={handleEdit}>Simpan</Button>
           </div>
         </div>
-      </RightSidePanel>
+      </Dialog>
     </div>
   );
 }

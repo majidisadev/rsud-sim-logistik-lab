@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../config/database';
 import { requireRole } from '../middleware/auth';
+import { isNullableHttpUrl } from '../utils/imageUrl';
 
 const router = express.Router();
 
@@ -63,6 +64,10 @@ router.post('/', requireRole('Admin'), async (req, res) => {
       return res.status(400).json({ error: 'Category name is required' });
     }
 
+    if (!isNullableHttpUrl(cover_image)) {
+      return res.status(400).json({ error: 'Gambar harus berupa URL (http/https)' });
+    }
+
     const result = await pool.query(
       'INSERT INTO categories (name, cover_image) VALUES ($1, $2) RETURNING *',
       [name, cover_image || null]
@@ -94,6 +99,9 @@ router.put('/:id', requireRole('Admin'), async (req, res) => {
     }
 
     if (cover_image !== undefined) {
+      if (!isNullableHttpUrl(cover_image)) {
+        return res.status(400).json({ error: 'Gambar harus berupa URL (http/https)' });
+      }
       updateFields.push(`cover_image = $${paramCount++}`);
       values.push(cover_image);
     }

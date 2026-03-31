@@ -5,12 +5,13 @@ import bcrypt from 'bcryptjs';
 
 async function runMigrations() {
   try {
-    const sql = fs.readFileSync(
+    const createTablesSql = fs.readFileSync(
       path.join(__dirname, 'createTables.sql'),
       'utf8'
     );
     
-    await pool.query(sql);
+    await pool.query(createTablesSql);
+
     console.log('Database migrations completed successfully');
     
     // Create default admin user

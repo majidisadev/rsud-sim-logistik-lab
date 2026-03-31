@@ -13,9 +13,6 @@ import {
 } from "lucide-react";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import RightSidePanel from "../components/ui/RightSidePanel";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
 import {
   LineChart,
   Line,
@@ -27,11 +24,19 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../components/ui/toast";
+import { useConfirmDialog } from "../components/ui/confirm-dialog";
+import { getErrorMessage } from "../lib/getErrorMessage";
+import { usePrefersReducedMotion } from "../lib/hooks/usePrefersReducedMotion";
+import Dialog from "../components/ui/Dialog";
 
 export default function ItemDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useToast();
+  const { confirm, dialog } = useConfirmDialog();
+  const reduceMotion = usePrefersReducedMotion();
   const [item, setItem] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isPrintingStockCard, setIsPrintingStockCard] = useState(false);
@@ -75,9 +80,7 @@ export default function ItemDetail() {
     image: "",
     suppliers: [] as string[],
   });
-  const [imageMode, setImageMode] = useState<"url" | "upload">("url");
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string>("");
+  const editNameInputRef = useRef<HTMLInputElement | null>(null);
 
   const pageRef = useRef<HTMLDivElement>(null);
   const headerCardRef = useRef<HTMLElement>(null);
@@ -89,11 +92,13 @@ export default function ItemDetail() {
 
   useEffect(() => {
     if (id) {
-      fetchItem();
-      fetchAllTransactionsForBalanceAndVisible();
-      fetchMonthlyStats();
-      fetchSuppliers();
-      fetchCategories();
+      void Promise.all([
+        fetchItem(),
+        fetchAllTransactionsForBalanceAndVisible(),
+        fetchMonthlyStats(),
+        fetchSuppliers(),
+        fetchCategories(),
+      ]);
       setCurrentPage(1);
     }
   }, [id]);
@@ -104,6 +109,7 @@ export default function ItemDetail() {
 
   // Entrance animations
   useEffect(() => {
+    if (reduceMotion) return;
     if (loading || !item) return;
     const targets = [
       { el: pageRef.current, delay: 0 },
@@ -123,10 +129,11 @@ export default function ItemDetail() {
         easing: "easeOutCubic",
       });
     });
-  }, [loading, item]);
+  }, [loading, item, reduceMotion]);
 
   // Stagger lot rows
   useEffect(() => {
+    if (reduceMotion) return;
     if (!item?.lots?.length || loading) return;
     lotRowRefs.current = lotRowRefs.current.slice(0, item.lots.length);
     const targets = lotRowRefs.current.filter(Boolean);
@@ -139,10 +146,11 @@ export default function ItemDetail() {
       delay: anime.stagger(35, { start: 300 }),
       easing: "easeOutCubic",
     });
-  }, [item?.lots, loading]);
+  }, [item?.lots, loading, reduceMotion]);
 
   // Stagger transaction rows (runs when we have transaction data)
   useEffect(() => {
+    if (reduceMotion) return;
     if (loading || !item || txCount === 0) return;
     txRowRefs.current = txRowRefs.current.slice(0, txCount);
     const targets = txRowRefs.current.filter(Boolean);
@@ -155,7 +163,7 @@ export default function ItemDetail() {
       delay: anime.stagger(25, { start: 400 }),
       easing: "easeOutCubic",
     });
-  }, [loading, item, allTransactions.length, currentPage, itemsPerPage]);
+  }, [loading, item, allTransactions.length, currentPage, itemsPerPage, reduceMotion]);
 
   const fetchItem = async () => {
     try {
@@ -269,6 +277,11 @@ export default function ItemDetail() {
     if (!item) return;
     setIsPrintingStockCard(true);
     try {
+      const [{ default: jsPDF }, _autoTable] = await Promise.all([
+        import("jspdf"),
+        import("jspdf-autotable"),
+      ]);
+
       const activeDateFilter =
         transactionFilter.start_date || transactionFilter.end_date
           ? transactionFilter
@@ -432,7 +445,7 @@ export default function ItemDetail() {
       );
     } catch (e) {
       console.error("Error printing stock card PDF:", e);
-      alert("Gagal mencetak kartu stok");
+      toast({ variant: "error", title: "Gagal mencetak kartu stok" });
     } finally {
       setIsPrintingStockCard(false);
     }
@@ -524,19 +537,6 @@ export default function ItemDetail() {
     }
   };
 
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-        setEditForm({ ...editForm, image: reader.result as string });
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleOpenEditModal = () => {
     if (item) {
       setEditForm({
@@ -549,9 +549,6 @@ export default function ItemDetail() {
         image: item.image || "",
         suppliers: item.suppliers?.map((s: any) => s.id.toString()) || [],
       });
-      setImageMode(item.image ? "url" : "url");
-      setImageFile(null);
-      setImagePreview(item.image || "");
       setShowEditItemModal(true);
     }
   };
@@ -561,7 +558,8 @@ export default function ItemDetail() {
       const trimmedName = editForm.name.trim();
       const normalizedName = trimmedName.toLowerCase();
       if (!normalizedName) {
-        alert("Nama barang wajib diisi");
+        toast({ variant: "error", title: "Nama barang wajib diisi" });
+        editNameInputRef.current?.focus();
         return;
       }
 
@@ -581,16 +579,10 @@ export default function ItemDetail() {
         });
 
         if (isDuplicate) {
-          alert("Nama barang sudah ada");
+          toast({ variant: "error", title: "Nama barang sudah ada" });
+          editNameInputRef.current?.focus();
           return;
         }
-      }
-
-      let imageUrl = editForm.image;
-
-      // If image file is uploaded, convert to base64
-      if (imageFile && imageMode === "upload") {
-        imageUrl = imagePreview;
       }
 
       const updateData: any = {
@@ -602,17 +594,20 @@ export default function ItemDetail() {
         unit: editForm.unit,
         temperature: editForm.temperature,
         min_stock: parseInt(editForm.min_stock.toString()),
-        image: imageUrl || null,
+        image: editForm.image || null,
         suppliers: editForm.suppliers.map((s) => parseInt(s)),
       };
 
       await api.put(`/items/${id}`, updateData);
       setShowEditItemModal(false);
-      setImageFile(null);
-      setImagePreview("");
       fetchItem();
+      toast({ variant: "success", title: "Barang berhasil diperbarui" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error updating item");
+      toast({
+        variant: "error",
+        title: "Gagal memperbarui barang",
+        description: getErrorMessage(error, "Error updating item"),
+      });
     }
   };
 
@@ -625,8 +620,13 @@ export default function ItemDetail() {
       setShowLotModal(false);
       setLotForm({ lot_number: "", expiration_date: "", stock: 0 });
       fetchItem();
+      toast({ variant: "success", title: "Lot berhasil ditambahkan" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error adding lot");
+      toast({
+        variant: "error",
+        title: "Gagal menambahkan lot",
+        description: getErrorMessage(error, "Error adding lot"),
+      });
     }
   };
 
@@ -640,18 +640,35 @@ export default function ItemDetail() {
       setSelectedLot(null);
       setLotForm({ lot_number: "", expiration_date: "", stock: 0 });
       fetchItem();
+      toast({ variant: "success", title: "Lot berhasil diperbarui" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error updating lot");
+      toast({
+        variant: "error",
+        title: "Gagal memperbarui lot",
+        description: getErrorMessage(error, "Error updating lot"),
+      });
     }
   };
 
   const handleDeleteLot = async (lotId: number) => {
-    if (!confirm("Hapus lot ini?")) return;
+    const ok = await confirm({
+      title: "Hapus lot?",
+      description: "Tindakan ini tidak bisa dibatalkan.",
+      confirmText: "Ya, hapus",
+      cancelText: "Batal",
+      variant: "destructive",
+    });
+    if (!ok) return;
     try {
       await api.delete(`/items/${id}/lots/${lotId}`);
       fetchItem();
+      toast({ variant: "success", title: "Lot berhasil dihapus" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error deleting lot");
+      toast({
+        variant: "error",
+        title: "Gagal menghapus lot",
+        description: getErrorMessage(error, "Error deleting lot"),
+      });
     }
   };
 
@@ -721,6 +738,7 @@ export default function ItemDetail() {
 
   return (
     <div ref={pageRef} className="space-y-6" role="main">
+      {dialog}
       <Button
         variant="outline"
         onClick={() => navigate("/barang")}
@@ -761,6 +779,8 @@ export default function ItemDetail() {
                   alt={`Gambar ${item.name}`}
                   className="w-full h-56 md:h-72 object-cover"
                   loading="eager"
+                  width={1024}
+                  height={576}
                 />
               </figure>
             )}
@@ -1202,12 +1222,12 @@ export default function ItemDetail() {
         </div>
       </section>
 
-      {/* Tambah lot — panel kanan */}
-      <RightSidePanel
-        isOpen={showLotModal}
+      <Dialog
+        open={showLotModal}
         onClose={() => setShowLotModal(false)}
         title="Tambah Lot"
         titleId="panel-item-lot-add"
+        size="md"
       >
         <div className="space-y-4">
           <div>
@@ -1218,6 +1238,7 @@ export default function ItemDetail() {
                 setLotForm({ ...lotForm, lot_number: e.target.value })
               }
               required
+              data-autofocus
             />
           </div>
           <div>
@@ -1250,14 +1271,14 @@ export default function ItemDetail() {
             <Button onClick={handleAddLot}>Simpan</Button>
           </div>
         </div>
-      </RightSidePanel>
+      </Dialog>
 
-      {/* Edit lot — panel kanan */}
-      <RightSidePanel
-        isOpen={showEditLotModal}
+      <Dialog
+        open={showEditLotModal}
         onClose={() => setShowEditLotModal(false)}
         title="Edit Lot"
         titleId="panel-item-lot-edit"
+        size="md"
       >
         <div className="space-y-4">
           <div>
@@ -1292,19 +1313,16 @@ export default function ItemDetail() {
             <Button onClick={handleEditLot}>Simpan</Button>
           </div>
         </div>
-      </RightSidePanel>
+      </Dialog>
 
-      {/* Edit barang — panel kanan */}
-      <RightSidePanel
-        isOpen={showEditItemModal}
+      <Dialog
+        open={showEditItemModal}
         onClose={() => {
           setShowEditItemModal(false);
-          setImageFile(null);
-          setImagePreview("");
         }}
         title="Edit Barang"
-        width="xl"
         titleId="panel-item-edit"
+        size="xl"
       >
         <div className="space-y-4">
           <div>
@@ -1312,11 +1330,14 @@ export default function ItemDetail() {
               Nama Barang
             </label>
             <Input
+              name="item_name"
               value={editForm.name}
               onChange={(e) =>
                 setEditForm({ ...editForm, name: e.target.value })
               }
               required
+              autoComplete="off"
+              ref={editNameInputRef}
             />
           </div>
           <div>
@@ -1385,74 +1406,21 @@ export default function ItemDetail() {
           </div>
           <div>
             <label className="block text-sm font-medium mb-2">Gambar</label>
-            <div className="mb-2">
-              <div className="flex space-x-2 mb-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setImageMode("url");
-                    setImageFile(null);
-                    setImagePreview("");
-                    setEditForm({ ...editForm, image: "" });
-                  }}
-                  className={`px-3 py-1 text-sm rounded-lg transition-colors ${
-                    imageMode === "url"
-                      ? "bg-primary text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  URL
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setImageMode("upload");
-                    setEditForm({ ...editForm, image: "" });
-                  }}
-                  className={`px-3 py-1 text-sm rounded-lg transition-colors ${
-                    imageMode === "upload"
-                      ? "bg-primary text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  Upload
-                </button>
-              </div>
-            </div>
-            {imageMode === "url" ? (
-              <Input
-                type="url"
-                value={editForm.image}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, image: e.target.value })
-                }
-                placeholder="Masukkan URL gambar"
-              />
-            ) : (
-              <div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageFileChange}
-                  className="w-full border border-gray-300 rounded-lg p-2"
-                />
-                {imagePreview && (
-                  <div className="mt-2">
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="max-w-full h-32 object-contain rounded-lg border border-gray-300"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-            {editForm.image && imageMode === "url" && (
+            <Input
+              type="url"
+              value={editForm.image}
+              onChange={(e) => setEditForm({ ...editForm, image: e.target.value })}
+              placeholder="Masukkan URL gambar"
+            />
+            {editForm.image && (
               <div className="mt-2">
                 <img
                   src={editForm.image}
                   alt="Preview"
                   className="max-w-full h-32 object-contain rounded-lg border border-gray-300"
+                  width={512}
+                  height={256}
+                  loading="lazy"
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = "none";
                   }}
@@ -1502,8 +1470,6 @@ export default function ItemDetail() {
               variant="outline"
               onClick={() => {
                 setShowEditItemModal(false);
-                setImageFile(null);
-                setImagePreview("");
               }}
             >
               Batal
@@ -1511,7 +1477,7 @@ export default function ItemDetail() {
             <Button onClick={handleUpdateItem}>Simpan</Button>
           </div>
         </div>
-      </RightSidePanel>
+      </Dialog>
     </div>
   );
 }

@@ -1,15 +1,20 @@
 import { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import api from "../lib/api";
 import { Plus, Eye, Power, Package, Inbox } from "lucide-react";
 import anime from "animejs";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import RightSidePanel from "../components/ui/RightSidePanel";
-import * as XLSX from "xlsx";
+import Dialog from "../components/ui/Dialog";
+import { useToast } from "../components/ui/toast";
+import { useConfirmDialog } from "../components/ui/confirm-dialog";
+import { getErrorMessage } from "../lib/getErrorMessage";
+import { usePrefersReducedMotion } from "../lib/hooks/usePrefersReducedMotion";
 
 export default function PengaturanBarang() {
-  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { confirm, dialog } = useConfirmDialog();
+  const reduceMotion = usePrefersReducedMotion();
   const [items, setItems] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [suppliers, setSuppliers] = useState<any[]>([]);
@@ -27,13 +32,11 @@ export default function PengaturanBarang() {
     image: "",
     suppliers: [] as string[],
   });
-  const [imageMode, setImageMode] = useState<"url" | "upload">("url");
-  const [, setImageFile] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string>("");
   const tableBodyRef = useRef<HTMLTableSectionElement>(null);
   const [importing, setImporting] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const importFileRef = useRef<HTMLInputElement | null>(null);
+  const addNameInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     fetchItems();
@@ -42,6 +45,7 @@ export default function PengaturanBarang() {
   }, []);
 
   useEffect(() => {
+    if (reduceMotion) return;
     if (loading || items.length === 0 || !tableBodyRef.current) return;
     const rows = tableBodyRef.current.querySelectorAll("tr");
     if (rows.length === 0) return;
@@ -53,7 +57,7 @@ export default function PengaturanBarang() {
       duration: 360,
       easing: "easeOutCubic",
     });
-  }, [loading, items]);
+  }, [loading, items, reduceMotion]);
 
   const fetchItems = async () => {
     try {
@@ -88,10 +92,13 @@ export default function PengaturanBarang() {
     // Template sesuai requirement import:
     // - nama barang
     // - stock
-    const ws = XLSX.utils.aoa_to_sheet([["nama barang", "stock"]]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template");
-    XLSX.writeFile(wb, "template-import-barang.xlsx");
+    void (async () => {
+      const XLSX = await import("xlsx");
+      const ws = XLSX.utils.aoa_to_sheet([["nama barang", "stock"]]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Template");
+      XLSX.writeFile(wb, "template-import-barang.xlsx");
+    })();
   };
 
   const normalizeHeader = (value: any) =>
@@ -106,7 +113,11 @@ export default function PengaturanBarang() {
 
   const handleImportExcel = async () => {
     if (!importFile) {
-      alert("Silakan pilih file Excel terlebih dahulu");
+      toast({
+        variant: "error",
+        title: "Pilih file terlebih dahulu",
+        description: "Silakan pilih file Excel sebelum melakukan import.",
+      });
       return;
     }
 
@@ -114,10 +125,15 @@ export default function PengaturanBarang() {
       setImporting(true);
 
       const buffer = await importFile.arrayBuffer();
+      const XLSX = await import("xlsx");
       const workbook = XLSX.read(buffer, { type: "array" });
 
       if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
-        alert("File Excel tidak memiliki sheet");
+        toast({
+          variant: "error",
+          title: "File tidak valid",
+          description: "File Excel tidak memiliki sheet.",
+        });
         return;
       }
 
@@ -129,7 +145,11 @@ export default function PengaturanBarang() {
       }) as any[][];
 
       if (!rows || rows.length < 2) {
-        alert("Excel harus memiliki header dan minimal 1 baris data");
+        toast({
+          variant: "error",
+          title: "Format Excel tidak valid",
+          description: "Excel harus memiliki header dan minimal 1 baris data.",
+        });
         return;
       }
 
@@ -138,9 +158,11 @@ export default function PengaturanBarang() {
       const stockColIndex = headerRow.findIndex((h) => h === "stock");
 
       if (nameColIndex === -1 || stockColIndex === -1) {
-        alert(
-          "Header Excel tidak sesuai. Harus berisi kolom: `nama barang` dan `stock`."
-        );
+        toast({
+          variant: "error",
+          title: "Header Excel tidak sesuai",
+          description: "Kolom wajib: nama barang dan stock.",
+        });
         return;
       }
 
@@ -209,7 +231,12 @@ export default function PengaturanBarang() {
       }
 
       if (fileErrors.length > 0) {
-        alert(fileErrors.join("\n"));
+        toast({
+          variant: "error",
+          title: "Periksa data Excel",
+          description: fileErrors.slice(0, 3).join(" • ") + (fileErrors.length > 3 ? ` • (+${fileErrors.length - 3} lainnya)` : ""),
+          durationMs: 7000,
+        });
         return;
       }
 
@@ -225,46 +252,42 @@ export default function PengaturanBarang() {
       }
 
       if (dupErrors.length > 0) {
-        alert(dupErrors.join("\n"));
+        toast({
+          variant: "error",
+          title: "Duplikasi dengan data yang sudah ada",
+          description: dupErrors.slice(0, 3).join(" • ") + (dupErrors.length > 3 ? ` • (+${dupErrors.length - 3} lainnya)` : ""),
+          durationMs: 7000,
+        });
         return;
       }
 
       const res = await api.post("/items/import", { items: payload });
-      alert(
-        `${res.data?.message || "Import berhasil"}: ${
-          res.data?.imported ?? payload.length
-        } barang ditambahkan`
-      );
+      toast({
+        variant: "success",
+        title: res.data?.message || "Import berhasil",
+        description: `${res.data?.imported ?? payload.length} barang ditambahkan.`,
+      });
 
       await fetchItems();
 
       setImportFile(null);
       if (importFileRef.current) importFileRef.current.value = "";
     } catch (error: any) {
-      alert(error.response?.data?.error || "Gagal mengimport Excel");
+      toast({
+        variant: "error",
+        title: "Gagal import Excel",
+        description: getErrorMessage(error, "Gagal mengimport Excel."),
+      });
     } finally {
       setImporting(false);
-    }
-  };
-
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        setImagePreview(base64String);
-        setForm({ ...form, image: base64String });
-      };
-      reader.readAsDataURL(file);
     }
   };
 
   const handleSubmit = async () => {
     const normalizedName = form.name.trim().toLowerCase();
     if (!normalizedName) {
-      alert("Nama barang wajib diisi");
+      toast({ variant: "error", title: "Nama barang wajib diisi" });
+      addNameInputRef.current?.focus();
       return;
     }
 
@@ -274,7 +297,8 @@ export default function PengaturanBarang() {
       return itemName === normalizedName;
     });
     if (isDuplicate) {
-      alert("Nama barang sudah ada");
+      toast({ variant: "error", title: "Nama barang sudah ada" });
+      addNameInputRef.current?.focus();
       return;
     }
 
@@ -301,12 +325,14 @@ export default function PengaturanBarang() {
         image: "",
         suppliers: [],
       });
-      setImageMode("url");
-      setImageFile(null);
-      setImagePreview("");
       fetchItems();
+      toast({ variant: "success", title: "Barang berhasil ditambahkan" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error creating item");
+      toast({
+        variant: "error",
+        title: "Gagal menambahkan barang",
+        description: getErrorMessage(error, "Error creating item"),
+      });
     }
   };
 
@@ -323,22 +349,33 @@ export default function PengaturanBarang() {
       image: "",
       suppliers: [],
     });
-    setImageMode("url");
-    setImageFile(null);
-    setImagePreview("");
   };
 
   const handleToggleStatus = async (id: number) => {
     try {
+      const ok = await confirm({
+        title: "Ubah status barang?",
+        description: "Barang akan diaktifkan/nonaktifkan. Anda bisa mengubahnya lagi nanti.",
+        confirmText: "Ya, ubah status",
+        cancelText: "Batal",
+        variant: "destructive",
+      });
+      if (!ok) return;
       await api.patch(`/items/${id}/toggle-status`);
       fetchItems();
+      toast({ variant: "success", title: "Status barang diperbarui" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error toggling status");
+      toast({
+        variant: "error",
+        title: "Gagal memperbarui status",
+        description: getErrorMessage(error, "Error toggling status"),
+      });
     }
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {dialog}
       <section aria-labelledby="page-title">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -527,14 +564,13 @@ export default function PengaturanBarang() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/barang/${item.id}`)}
+                        <Link
+                          to={`/barang/${item.id}`}
                           aria-label={`Lihat detail ${item.name}`}
+                          className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         >
                           <Eye className="w-4 h-4" aria-hidden />
-                        </Button>
+                        </Link>
                         {item.status === "Active" ? (
                           <Button
                             size="sm"
@@ -564,15 +600,15 @@ export default function PengaturanBarang() {
         </div>
       </div>
 
-      <RightSidePanel
-        isOpen={showPanel}
+      <Dialog
+        open={showPanel}
         onClose={() => {
           setShowPanel(false);
           resetForm();
         }}
         title="Tambah Barang"
-        width="xl"
         titleId="panel-tambah-barang"
+        size="xl"
       >
         <div className="space-y-5">
           <div>
@@ -581,11 +617,15 @@ export default function PengaturanBarang() {
             </label>
             <Input
               id="barang-name"
+              name="item_name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
               placeholder="Contoh: Alkohol 70%"
               aria-required="true"
+              autoComplete="off"
+              ref={addNameInputRef}
+              data-autofocus
             />
           </div>
           <div>
@@ -594,6 +634,7 @@ export default function PengaturanBarang() {
             </label>
             <textarea
               id="barang-desc"
+              name="item_description"
               value={form.description}
               onChange={(e) =>
                 setForm({ ...form, description: e.target.value })
@@ -610,6 +651,7 @@ export default function PengaturanBarang() {
               </label>
               <select
                 id="barang-kategori"
+                name="category_id"
                 value={form.category_id}
                 onChange={(e) =>
                   setForm({ ...form, category_id: e.target.value })
@@ -632,9 +674,11 @@ export default function PengaturanBarang() {
               </label>
               <Input
                 id="barang-satuan"
+                name="unit"
                 value={form.unit}
                 onChange={(e) => setForm({ ...form, unit: e.target.value })}
                 placeholder="ml, pcs, box"
+                autoComplete="off"
               />
             </div>
             <div>
@@ -643,11 +687,13 @@ export default function PengaturanBarang() {
               </label>
               <Input
                 id="barang-suhu"
+                name="temperature"
                 value={form.temperature}
                 onChange={(e) =>
                   setForm({ ...form, temperature: e.target.value })
                 }
                 placeholder="Contoh: 2-8°C"
+                autoComplete="off"
               />
             </div>
             <div>
@@ -657,12 +703,14 @@ export default function PengaturanBarang() {
               <Input
                 id="barang-min-stock"
                 type="number"
+                name="min_stock"
                 value={form.min_stock}
                 onChange={(e) =>
                   setForm({ ...form, min_stock: parseInt(e.target.value) || 1 })
                 }
                 min={1}
                 aria-describedby="barang-min-stock-desc"
+                inputMode="numeric"
               />
               <span id="barang-min-stock-desc" className="sr-only">Minimum stok yang diizinkan</span>
             </div>
@@ -673,6 +721,7 @@ export default function PengaturanBarang() {
               <Input
                 id="barang-stock-awal"
                 type="number"
+                name="stock_awal"
                 value={form.stock_awal}
                 onChange={(e) =>
                   setForm({
@@ -681,6 +730,7 @@ export default function PengaturanBarang() {
                   })
                 }
                 min={0}
+                inputMode="numeric"
               />
             </div>
             <div>
@@ -690,6 +740,7 @@ export default function PengaturanBarang() {
               <Input
                 id="barang-expiration"
                 type="date"
+                name="expiration_date"
                 value={form.expiration_date}
                 onChange={(e) =>
                   setForm({ ...form, expiration_date: e.target.value })
@@ -699,74 +750,24 @@ export default function PengaturanBarang() {
           </div>
           <div>
             <span className="block text-sm font-medium text-gray-700 mb-2">Gambar</span>
-            <div className="flex gap-2 mb-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setImageMode("url");
-                  setImageFile(null);
-                  setImagePreview("");
-                  setForm({ ...form, image: "" });
-                }}
-                className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                  imageMode === "url"
-                    ? "bg-primary text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                aria-pressed={imageMode === "url"}
-              >
-                URL
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setImageMode("upload");
-                  setForm({ ...form, image: "" });
-                }}
-                className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                  imageMode === "upload"
-                    ? "bg-primary text-white"
-                    : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                }`}
-                aria-pressed={imageMode === "upload"}
-              >
-                Upload
-              </button>
-            </div>
-            {imageMode === "url" ? (
-              <Input
-                type="url"
-                value={form.image}
-                onChange={(e) => setForm({ ...form, image: e.target.value })}
-                placeholder="https://..."
-                aria-label="URL gambar"
-              />
-            ) : (
-              <div>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageFileChange}
-                  className="w-full border border-gray-300 rounded-lg p-2 text-sm file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-gray-100 file:text-gray-700"
-                  aria-label="Pilih file gambar"
-                />
-                {imagePreview && (
-                  <div className="mt-2">
-                    <img
-                      src={imagePreview}
-                      alt="Preview gambar"
-                      className="max-w-full h-32 object-contain rounded-lg border border-gray-200"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-            {form.image && imageMode === "url" && (
+            <Input
+              type="url"
+              name="image_url"
+              value={form.image}
+              onChange={(e) => setForm({ ...form, image: e.target.value })}
+              placeholder="https://..."
+              aria-label="URL gambar"
+              autoComplete="off"
+            />
+            {form.image && (
               <div className="mt-2">
                 <img
                   src={form.image}
                   alt="Preview dari URL"
                   className="max-w-full h-32 object-contain rounded-lg border border-gray-200"
+                  width={512}
+                  height={256}
+                  loading="lazy"
                   onError={(e) => {
                     (e.target as HTMLImageElement).style.display = "none";
                   }}
@@ -830,7 +831,7 @@ export default function PengaturanBarang() {
             <Button onClick={handleSubmit}>Simpan</Button>
           </div>
         </div>
-      </RightSidePanel>
+      </Dialog>
     </div>
   );
 }

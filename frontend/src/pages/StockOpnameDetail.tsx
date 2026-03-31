@@ -14,10 +14,17 @@ import {
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
+import { useToast } from '../components/ui/toast';
+import { useConfirmDialog } from '../components/ui/confirm-dialog';
+import { getErrorMessage } from '../lib/getErrorMessage';
+import { usePrefersReducedMotion } from '../lib/hooks/usePrefersReducedMotion';
 
 export default function StockOpnameDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const { confirm, dialog } = useConfirmDialog();
+  const reduceMotion = usePrefersReducedMotion();
   const [opname, setOpname] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
   const [itemSearch, setItemSearch] = useState('');
@@ -51,6 +58,7 @@ export default function StockOpnameDetail() {
 
   // Entrance animations
   useEffect(() => {
+    if (reduceMotion) return;
     if (!pageRef.current || !navRef.current) return;
     anime({
       targets: pageRef.current,
@@ -97,10 +105,11 @@ export default function StockOpnameDetail() {
         easing: 'easeOutCubic',
       });
     }
-  }, [isNew]);
+  }, [isNew, reduceMotion]);
 
   // Stagger table rows when opname items change
   useEffect(() => {
+    if (reduceMotion) return;
     const itemList = opname?.items ?? [];
     if (itemList.length === 0) return;
     rowRefs.current = rowRefs.current.slice(0, itemList.length);
@@ -114,7 +123,7 @@ export default function StockOpnameDetail() {
       delay: anime.stagger(35, { start: 100 }),
       easing: 'easeOutCubic',
     });
-  }, [opname?.items?.length]);
+  }, [opname?.items?.length, reduceMotion]);
 
   const fetchOpname = async () => {
     try {
@@ -153,6 +162,7 @@ export default function StockOpnameDetail() {
           ],
         });
         navigate(`/stock-opname/${opnameRes.data.id}`);
+        toast({ variant: 'success', title: 'Stock opname berhasil dibuat' });
       } else {
         await api.post(`/stock-opnames/${id}/items`, newItem);
         setNewItem({
@@ -164,22 +174,39 @@ export default function StockOpnameDetail() {
         });
         setItemSearch('');
         await fetchOpname();
+        toast({ variant: 'success', title: 'Item berhasil ditambahkan' });
       }
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Gagal menambah item');
+      toast({
+        variant: 'error',
+        title: 'Gagal menambah item',
+        description: getErrorMessage(error, 'Gagal menambah item'),
+      });
     } finally {
       setAdding(false);
     }
   };
 
   const handleDeleteItem = async (itemId: number) => {
-    if (!window.confirm('Hapus item ini dari stock opname?')) return;
+    const ok = await confirm({
+      title: 'Hapus item dari stock opname?',
+      description: 'Tindakan ini tidak bisa dibatalkan.',
+      confirmText: 'Ya, hapus',
+      cancelText: 'Batal',
+      variant: 'destructive',
+    });
+    if (!ok) return;
     try {
       setDeletingId(itemId);
       await api.delete(`/stock-opnames/${id}/items/${itemId}`);
       await fetchOpname();
+      toast({ variant: 'success', title: 'Item berhasil dihapus' });
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Gagal menghapus item');
+      toast({
+        variant: 'error',
+        title: 'Gagal menghapus item',
+        description: getErrorMessage(error, 'Gagal menghapus item'),
+      });
     } finally {
       setDeletingId(null);
     }
@@ -214,6 +241,7 @@ export default function StockOpnameDetail() {
 
   return (
     <main ref={pageRef} className="space-y-6" aria-label="Detail Stock Opname">
+      {dialog}
       <nav ref={navRef} aria-label="Navigasi">
         <Button
           variant="outline"
@@ -277,6 +305,7 @@ export default function StockOpnameDetail() {
               aria-expanded={filteredItems.length > 0}
               aria-controls="item-search-list"
               aria-describedby="item-search-hint"
+              data-autofocus
             />
             <p id="item-search-hint" className="mt-1 text-xs text-muted-foreground">
               Pilih dari daftar atau ketik nama barang

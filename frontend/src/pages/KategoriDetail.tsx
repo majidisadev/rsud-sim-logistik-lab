@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import anime from "animejs";
 import api from "../lib/api";
 import { ArrowLeft, FolderOpen, Package } from "lucide-react";
@@ -151,6 +151,8 @@ export default function KategoriDetail() {
               alt={`Cover ${category.name}`}
               className="w-full h-full object-cover"
               loading="eager"
+              width={1536}
+              height={768}
             />
             <div
               className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent"
@@ -194,17 +196,13 @@ export default function KategoriDetail() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {category.items?.map((item: any, idx: number) => (
-                <a
+                <Link
                   key={item.id}
                   ref={(el) => {
                     itemCardRefs.current[idx] = el;
                   }}
-                  href={`/barang/${item.id}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    navigate(`/barang/${item.id}`);
-                  }}
-                  className="group flex flex-col rounded-xl border border-border bg-card overflow-hidden transition-all duration-200 hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  to={`/barang/${item.id}`}
+                  className="group flex flex-col rounded-xl border border-border bg-card overflow-hidden transition-transform transition-colors transition-shadow duration-200 hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   aria-label={`Lihat detail ${item.name}`}
                 >
                   {item.image ? (
@@ -213,6 +211,9 @@ export default function KategoriDetail() {
                         src={item.image}
                         alt=""
                         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        width={640}
+                        height={360}
+                        loading="lazy"
                       />
                     </div>
                   ) : (
@@ -228,7 +229,7 @@ export default function KategoriDetail() {
                       Stok: <span className="font-medium text-foreground">{item.stock ?? 0}</span>
                     </p>
                   </div>
-                </a>
+                </Link>
               ))}
             </div>
           )}

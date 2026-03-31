@@ -1,14 +1,20 @@
 import { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import api from "../lib/api";
 import { Plus, Edit, Trash2, Eye, FolderTree, Inbox } from "lucide-react";
 import anime from "animejs";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
-import RightSidePanel from "../components/ui/RightSidePanel";
+import Dialog from "../components/ui/Dialog";
+import { useToast } from "../components/ui/toast";
+import { useConfirmDialog } from "../components/ui/confirm-dialog";
+import { getErrorMessage } from "../lib/getErrorMessage";
+import { usePrefersReducedMotion } from "../lib/hooks/usePrefersReducedMotion";
 
 export default function PengaturanKategori() {
-  const navigate = useNavigate();
+  const { toast } = useToast();
+  const { confirm, dialog } = useConfirmDialog();
+  const reduceMotion = usePrefersReducedMotion();
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showPanel, setShowPanel] = useState(false);
@@ -22,6 +28,7 @@ export default function PengaturanKategori() {
   }, []);
 
   useEffect(() => {
+    if (reduceMotion) return;
     if (loading || categories.length === 0 || !tableBodyRef.current) return;
     const rows = tableBodyRef.current.querySelectorAll("tr");
     if (rows.length === 0) return;
@@ -33,7 +40,7 @@ export default function PengaturanKategori() {
       duration: 360,
       easing: "easeOutCubic",
     });
-  }, [loading, categories]);
+  }, [loading, categories, reduceMotion]);
 
   const fetchCategories = async () => {
     try {
@@ -52,8 +59,13 @@ export default function PengaturanKategori() {
       setShowPanel(false);
       setForm({ name: "" });
       fetchCategories();
+      toast({ variant: "success", title: "Kategori berhasil ditambahkan" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error creating category");
+      toast({
+        variant: "error",
+        title: "Gagal menambahkan kategori",
+        description: getErrorMessage(error, "Error creating category"),
+      });
     }
   };
 
@@ -64,23 +76,41 @@ export default function PengaturanKategori() {
       setSelectedCategory(null);
       setForm({ name: "" });
       fetchCategories();
+      toast({ variant: "success", title: "Kategori berhasil diperbarui" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error updating category");
+      toast({
+        variant: "error",
+        title: "Gagal memperbarui kategori",
+        description: getErrorMessage(error, "Error updating category"),
+      });
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Hapus kategori ini?")) return;
+    const ok = await confirm({
+      title: "Hapus kategori?",
+      description: "Tindakan ini tidak bisa dibatalkan.",
+      confirmText: "Ya, hapus",
+      cancelText: "Batal",
+      variant: "destructive",
+    });
+    if (!ok) return;
     try {
       await api.delete(`/categories/${id}`);
       fetchCategories();
+      toast({ variant: "success", title: "Kategori berhasil dihapus" });
     } catch (error: any) {
-      alert(error.response?.data?.error || "Error deleting category");
+      toast({
+        variant: "error",
+        title: "Gagal menghapus kategori",
+        description: getErrorMessage(error, "Error deleting category"),
+      });
     }
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {dialog}
       <section aria-labelledby="page-title">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -170,17 +200,14 @@ export default function PengaturanKategori() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() =>
-                            navigate(`/pengaturan/kategori/${category.id}`)
-                          }
+                        <Link
+                          to={`/pengaturan/kategori/${category.id}`}
                           aria-label={`Lihat detail ${category.name}`}
+                          className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         >
                           <Eye className="w-4 h-4 mr-1" aria-hidden />
                           Detail
-                        </Button>
+                        </Link>
                         <Button
                           size="sm"
                           variant="outline"
@@ -213,12 +240,12 @@ export default function PengaturanKategori() {
         </div>
       </div>
 
-      <RightSidePanel
-        isOpen={showPanel}
+      <Dialog
+        open={showPanel}
         onClose={() => setShowPanel(false)}
         title="Tambah Kategori"
-        width="sm"
         titleId="panel-tambah-kategori"
+        size="sm"
       >
         <div className="space-y-5">
           <div>
@@ -230,11 +257,13 @@ export default function PengaturanKategori() {
             </label>
             <Input
               id="kategori-name"
+              name="category_name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
               placeholder="Contoh: Bahan Kimia"
               aria-required="true"
+              autoComplete="off"
             />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
@@ -244,18 +273,18 @@ export default function PengaturanKategori() {
             <Button onClick={handleSubmit}>Simpan</Button>
           </div>
         </div>
-      </RightSidePanel>
+      </Dialog>
 
-      <RightSidePanel
-        isOpen={showEditPanel}
+      <Dialog
+        open={showEditPanel}
         onClose={() => {
           setShowEditPanel(false);
           setSelectedCategory(null);
           setForm({ name: "" });
         }}
         title="Edit Kategori"
-        width="sm"
         titleId="panel-edit-kategori"
+        size="sm"
       >
         <div className="space-y-5">
           <div>
@@ -267,11 +296,13 @@ export default function PengaturanKategori() {
             </label>
             <Input
               id="kategori-edit-name"
+              name="category_name"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               required
               placeholder="Contoh: Bahan Kimia"
               aria-required="true"
+              autoComplete="off"
             />
           </div>
           <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
@@ -287,7 +318,7 @@ export default function PengaturanKategori() {
             <Button onClick={handleEdit}>Simpan</Button>
           </div>
         </div>
-      </RightSidePanel>
+      </Dialog>
     </div>
   );
 }

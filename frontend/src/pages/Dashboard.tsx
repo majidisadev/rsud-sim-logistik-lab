@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import anime from "animejs";
 import api from "../lib/api";
 import {
@@ -23,6 +23,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
+import { usePrefersReducedMotion } from "../lib/hooks/usePrefersReducedMotion";
 
 const COLORS = ["#3b82f6", "#ef4444"];
 
@@ -88,7 +89,6 @@ function DashboardSkeleton() {
 }
 
 export default function Dashboard() {
-  const navigate = useNavigate();
   const [stats, setStats] = useState({
     expired: 0,
     soonExpired: 0,
@@ -100,7 +100,7 @@ export default function Dashboard() {
   const [recentIn, setRecentIn] = useState<any[]>([]);
   const [recentOut, setRecentOut] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [reduceMotion, setReduceMotion] = useState(false);
+  const reduceMotion = usePrefersReducedMotion();
 
   const welcomeRef = useRef<HTMLElement>(null);
   const cardsRef = useRef<HTMLDivElement>(null);
@@ -108,16 +108,8 @@ export default function Dashboard() {
   const chartBarRef = useRef<HTMLDivElement>(null);
   const recentInRef = useRef<HTMLDivElement>(null);
   const recentOutRef = useRef<HTMLDivElement>(null);
-  const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const cardRefs = useRef<(HTMLAnchorElement | null)[]>([]);
   const recentRowRefs = useRef<(HTMLDivElement | null)[]>([]);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduceMotion(mq.matches);
-    const handler = () => setReduceMotion(mq.matches);
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
-  }, []);
 
   useEffect(() => {
     fetchDashboardData();
@@ -125,13 +117,36 @@ export default function Dashboard() {
 
   const fetchDashboardData = async () => {
     try {
-      const [expiredRes, soonExpiredRes, outOfStockRes, lowStockRes] =
-        await Promise.all([
-          api.get("/items?expired=true"),
-          api.get("/items?soon_expired=true"),
-          api.get("/items?out_of_stock=true"),
-          api.get("/items?low_stock=true"),
-        ]);
+      const expiredPromise = api.get("/items?expired=true");
+      const soonExpiredPromise = api.get("/items?soon_expired=true");
+      const outOfStockPromise = api.get("/items?out_of_stock=true");
+      const lowStockPromise = api.get("/items?low_stock=true");
+
+      const dailyPromise = api.get("/transactions/stats?period=daily");
+      const monthlyPromise = api.get("/transactions/stats?period=monthly");
+
+      const recentInPromise = api.get("/transactions?type=Masuk&limit=5");
+      const recentOutPromise = api.get("/transactions?type=Keluar&limit=5");
+
+      const [
+        expiredRes,
+        soonExpiredRes,
+        outOfStockRes,
+        lowStockRes,
+        dailyRes,
+        monthlyRes,
+        inRes,
+        outRes,
+      ] = await Promise.all([
+        expiredPromise,
+        soonExpiredPromise,
+        outOfStockPromise,
+        lowStockPromise,
+        dailyPromise,
+        monthlyPromise,
+        recentInPromise,
+        recentOutPromise,
+      ]);
 
       setStats({
         expired: expiredRes.data.length,
@@ -139,11 +154,6 @@ export default function Dashboard() {
         outOfStock: outOfStockRes.data.length,
         lowStock: lowStockRes.data.length,
       });
-
-      const [dailyRes, monthlyRes] = await Promise.all([
-        api.get("/transactions/stats?period=daily"),
-        api.get("/transactions/stats?period=monthly"),
-      ]);
 
       const dailyDataArray = Array.isArray(dailyRes.data) ? dailyRes.data : [];
       const masukCount =
@@ -171,10 +181,6 @@ export default function Dashboard() {
       });
       setMonthlyStats(monthlyData);
 
-      const [inRes, outRes] = await Promise.all([
-        api.get("/transactions?type=Masuk&limit=5"),
-        api.get("/transactions?type=Keluar&limit=5"),
-      ]);
       setRecentIn(inRes.data.slice(0, 5));
       setRecentOut(outRes.data.slice(0, 5));
     } catch (error) {
@@ -362,21 +368,13 @@ export default function Dashboard() {
         {monitoringCards.map((card, index) => {
           const Icon = card.icon;
           return (
-            <div
+            <Link
               key={card.label}
               ref={(el) => {
                 cardRefs.current[index] = el;
               }}
-              role="button"
-              tabIndex={0}
-              onClick={() => navigate(card.href)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  navigate(card.href);
-                }
-              }}
-              className={`group flex cursor-pointer flex-col rounded-xl border-2 p-5 shadow-sm transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${card.className}`}
+              to={card.href}
+              className={`group flex cursor-pointer flex-col rounded-xl border-2 p-5 shadow-sm transition-colors transition-shadow duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${card.className}`}
               aria-label={`${card.label}: ${card.value} item. Klik untuk lihat daftar.`}
             >
               <div className="flex items-start justify-between">
@@ -400,7 +398,7 @@ export default function Dashboard() {
                 Lihat detail
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </span>
-            </div>
+            </Link>
           );
         })}
       </section>

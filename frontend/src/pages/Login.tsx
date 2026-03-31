@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { Package, Eye, EyeOff, Loader2 } from "lucide-react";
 import anime from "animejs";
+import { usePrefersReducedMotion } from "../lib/hooks/usePrefersReducedMotion";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -20,9 +21,11 @@ export default function Login() {
   const mobileLogoRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const errorRef = useRef<HTMLDivElement>(null);
+  const reduceMotion = usePrefersReducedMotion();
 
   // Entrance animations with Anime.js
   useEffect(() => {
+    if (reduceMotion) return;
     const tl = anime.timeline({
       easing: "easeOutExpo",
       duration: 800,
@@ -62,10 +65,11 @@ export default function Login() {
         },
         "-=200"
       );
-  }, []);
+  }, [reduceMotion]);
 
   // Error shake animation
   useEffect(() => {
+    if (reduceMotion) return;
     if (error && errorRef.current) {
       anime({
         targets: errorRef.current,
@@ -79,7 +83,7 @@ export default function Login() {
         easing: "easeInOutQuad",
       });
     }
-  }, [error]);
+  }, [error, reduceMotion]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,7 +123,7 @@ export default function Login() {
       {/* Skip to main content - Accessibility */}
       <a
         href="#login-form"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-white focus:text-primary focus:rounded-lg focus:ring-2 focus:ring-primary focus:outline-none transition-all"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-white focus:text-primary focus:rounded-lg focus:ring-2 focus:ring-primary focus:outline-none transition-colors"
       >
         Langsung ke formulir login
       </a>
@@ -229,7 +233,7 @@ export default function Login() {
                   aria-required="true"
                   aria-invalid={!!error}
                   aria-describedby="username-hint"
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all duration-200 placeholder:text-gray-400 disabled:opacity-60 disabled:cursor-not-allowed hover:border-gray-300"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-colors transition-shadow duration-200 placeholder:text-gray-400 disabled:opacity-60 disabled:cursor-not-allowed hover:border-gray-300"
                   placeholder="Masukkan username"
                 />
                 <span id="username-hint" className="sr-only">
@@ -245,7 +249,7 @@ export default function Login() {
                   Password
                 </label>
                 <div
-                  className={`relative rounded-xl border-2 transition-all duration-200 ${
+                  className={`relative rounded-xl border-2 transition-colors transition-shadow duration-200 ${
                     passwordFocused
                       ? "border-primary ring-2 ring-primary/30"
                       : "border-gray-200 hover:border-gray-300"
@@ -296,7 +300,7 @@ export default function Login() {
                 disabled={loading}
                 aria-busy={loading}
                 aria-live="polite"
-                className="w-full bg-primary text-white py-3 px-4 rounded-xl font-semibold hover:bg-primary/90 active:scale-[0.98] transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-2 shadow-lg shadow-primary/25 hover:shadow-primary/30 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus-visible:ring-2 focus-visible:ring-primary"
+                className="w-full bg-primary text-white py-3 px-4 rounded-xl font-semibold hover:bg-primary/90 active:scale-[0.98] transition-colors transition-shadow duration-200 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 flex items-center justify-center gap-2 shadow-lg shadow-primary/25 hover:shadow-primary/30 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus-visible:ring-2 focus-visible:ring-primary"
               >
                 {loading ? (
                   <>

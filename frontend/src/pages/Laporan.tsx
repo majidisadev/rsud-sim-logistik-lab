@@ -1,22 +1,17 @@
-import { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import anime from 'animejs';
-import api from '../lib/api';
-import { Download, Search, Eye, FileText, ArrowDownCircle, ArrowUpCircle, BarChart3 } from 'lucide-react';
+import { Download, Search, Eye, FileText } from 'lucide-react';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import useSWR from 'swr';
+import { usePrefersReducedMotion } from '../lib/hooks/usePrefersReducedMotion';
 
 export default function Laporan() {
-  const navigate = useNavigate();
-  const [reports, setReports] = useState<any[]>([]);
-  const [filteredReports, setFilteredReports] = useState<any[]>([]);
+  const reduceMotion = usePrefersReducedMotion();
   const [period, setPeriod] = useState<'monthly' | 'yearly'>('monthly');
   const [year, setYear] = useState(new Date().getFullYear().toString());
   const [month, setMonth] = useState((new Date().getMonth() + 1).toString());
-  const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
 
@@ -25,23 +20,25 @@ export default function Laporan() {
   const tableCardRef = useRef<HTMLDivElement>(null);
   const rowRefs = useRef<HTMLTableRowElement[]>([]);
 
-  useEffect(() => {
-    fetchReports();
+  const reportParams = useMemo(() => {
+    const params: Record<string, unknown> = { period, year };
+    if (period === 'monthly') params.month = month;
+    return params;
   }, [period, year, month]);
 
-  useEffect(() => {
-    if (searchTerm.trim() === '') {
-      setFilteredReports(reports);
-    } else {
-      const filtered = reports.filter((report) =>
-        report.item_name.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-      setFilteredReports(filtered);
-    }
-  }, [searchTerm, reports]);
+  const { data: reports = [], isLoading: loading } = useSWR<any[]>(['/reports', reportParams]);
+
+  const filteredReports = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return reports;
+    return reports.filter((report) =>
+      String(report.item_name || '').toLowerCase().includes(q)
+    );
+  }, [reports, searchTerm]);
 
   // Entrance animations on mount
   useEffect(() => {
+    if (reduceMotion) return;
     if (!pageRef.current || !filterCardRef.current || !tableCardRef.current) return;
     anime({
       targets: pageRef.current,
@@ -66,10 +63,11 @@ export default function Laporan() {
       delay: 180,
       easing: 'easeOutCubic',
     });
-  }, []);
+  }, [reduceMotion]);
 
   // Stagger rows when data loads
   useEffect(() => {
+    if (reduceMotion) return;
     if (loading || filteredReports.length === 0) return;
     rowRefs.current = rowRefs.current.slice(0, filteredReports.length);
     const targets = rowRefs.current.filter(Boolean);
@@ -82,68 +80,61 @@ export default function Laporan() {
       delay: anime.stagger(35, { start: 80 }),
       easing: 'easeOutCubic',
     });
-  }, [loading, filteredReports.length]);
+  }, [loading, filteredReports.length, reduceMotion]);
 
-  const fetchReports = async () => {
-    setLoading(true);
+  const exportToExcel = async () => {
+    setExporting('excel');
     try {
-      const params: any = { period, year };
-      if (period === 'monthly') params.month = month;
+      const XLSX = await import('xlsx');
+      const data = filteredReports.map((r) => ({
+        Barang: r.item_name,
+        Satuan: r.unit || '-',
+        'Jumlah Masuk': r.total_masuk,
+        'Jumlah Keluar': r.total_keluar,
+      }));
 
-      const res = await api.get('/reports', { params });
-      setReports(res.data);
-      setFilteredReports(res.data);
-    } catch (error) {
-      console.error('Error fetching reports:', error);
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Laporan');
+      XLSX.writeFile(wb, `laporan-${period}-${year}${period === 'monthly' ? `-${month}` : ''}.xlsx`);
     } finally {
-      setLoading(false);
+      setExporting(null);
     }
   };
 
-  const exportToExcel = () => {
-    setExporting('excel');
-    const data = filteredReports.map((r) => ({
-      Barang: r.item_name,
-      Satuan: r.unit || '-',
-      'Jumlah Masuk': r.total_masuk,
-      'Jumlah Keluar': r.total_keluar,
-    }));
-
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Laporan');
-    XLSX.writeFile(wb, `laporan-${period}-${year}${period === 'monthly' ? `-${month}` : ''}.xlsx`);
-    setExporting(null);
-  };
-
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     setExporting('pdf');
-    const doc = new jsPDF();
-    doc.text(
-      `Laporan ${period === 'monthly' ? 'Bulanan' : 'Tahunan'} ${year}${period === 'monthly' ? ` - ${month}` : ''}`,
-      14,
-      15
-    );
+    try {
+      const [{ default: jsPDF }, _autoTable] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ]);
 
-    const tableData = filteredReports.map((r) => [
-      r.item_name,
-      r.unit || '-',
-      r.total_masuk.toString(),
-      r.total_keluar.toString(),
-    ]);
+      const doc = new jsPDF();
+      doc.text(
+        `Laporan ${period === 'monthly' ? 'Bulanan' : 'Tahunan'} ${year}${period === 'monthly' ? ` - ${month}` : ''}`,
+        14,
+        15
+      );
 
-    (doc as any).autoTable({
-      head: [['Barang', 'Satuan', 'Jumlah Masuk', 'Jumlah Keluar']],
-      body: tableData,
-      startY: 20,
-    });
+      const tableData = filteredReports.map((r) => [
+        r.item_name,
+        r.unit || '-',
+        r.total_masuk.toString(),
+        r.total_keluar.toString(),
+      ]);
 
-    doc.save(`laporan-${period}-${year}${period === 'monthly' ? `-${month}` : ''}.pdf`);
-    setExporting(null);
+      (doc as any).autoTable({
+        head: [['Barang', 'Satuan', 'Jumlah Masuk', 'Jumlah Keluar']],
+        body: tableData,
+        startY: 20,
+      });
+
+      doc.save(`laporan-${period}-${year}${period === 'monthly' ? `-${month}` : ''}.pdf`);
+    } finally {
+      setExporting(null);
+    }
   };
-
-  const totalMasuk = filteredReports.reduce((sum, r) => sum + (r.total_masuk || 0), 0);
-  const totalKeluar = filteredReports.reduce((sum, r) => sum + (r.total_keluar || 0), 0);
 
   return (
     <div ref={pageRef} className="space-y-5" role="main" aria-label="Halaman Laporan">
@@ -155,7 +146,7 @@ export default function Laporan() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Laporan</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Ringkasan barang masuk dan keluar per periode</p>
+            <p className="text-sm text-gray-500 mt-0.5">Barang masuk dan keluar per periode</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -182,37 +173,6 @@ export default function Laporan() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-white border border-gray-100 shadow-sm">
-          <div className="p-2 rounded-lg bg-indigo-50">
-            <BarChart3 className="w-5 h-5 text-indigo-600" />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Jumlah Barang</p>
-            <p className="text-xl font-bold text-gray-900">{filteredReports.length}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-white border border-gray-100 shadow-sm">
-          <div className="p-2 rounded-lg bg-emerald-50">
-            <ArrowDownCircle className="w-5 h-5 text-emerald-600" />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Total Masuk</p>
-            <p className="text-xl font-bold text-gray-900">{totalMasuk.toLocaleString('id-ID')}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-white border border-gray-100 shadow-sm">
-          <div className="p-2 rounded-lg bg-amber-50">
-            <ArrowUpCircle className="w-5 h-5 text-amber-600" />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500 font-medium">Total Keluar</p>
-            <p className="text-xl font-bold text-gray-900">{totalKeluar.toLocaleString('id-ID')}</p>
-          </div>
-        </div>
-      </div>
-
       {/* Filters */}
       <div
         ref={filterCardRef}
@@ -229,11 +189,13 @@ export default function Laporan() {
             <Input
               id="search-laporan"
               type="text"
+              name="search"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Masukkan nama barang..."
               className="pl-10 focus:ring-2 focus:ring-indigo-500"
               aria-describedby="search-laporan-desc"
+              autoComplete="off"
             />
             <span id="search-laporan-desc" className="sr-only">Filter hasil laporan berdasarkan nama barang</span>
           </div>
@@ -245,6 +207,7 @@ export default function Laporan() {
             </label>
             <select
               id="period-laporan"
+              name="period"
               value={period}
               onChange={(e) => setPeriod(e.target.value as 'monthly' | 'yearly')}
               className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
@@ -260,11 +223,13 @@ export default function Laporan() {
             <Input
               id="year-laporan"
               type="number"
+              name="year"
               value={year}
               onChange={(e) => setYear(e.target.value)}
               min="2020"
               max="2099"
               className="focus:ring-2 focus:ring-indigo-500"
+              inputMode="numeric"
             />
           </div>
           {period === 'monthly' && (
@@ -274,6 +239,7 @@ export default function Laporan() {
               </label>
               <select
                 id="month-laporan"
+                name="month"
                 value={month}
                 onChange={(e) => setMonth(e.target.value)}
                 className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors"
@@ -364,16 +330,14 @@ export default function Laporan() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => navigate(`/barang/${report.id}`)}
+                      <Link
+                        to={`/barang/${report.id}`}
                         aria-label={`Lihat detail ${report.item_name}`}
-                        className="focus:ring-2 focus:ring-indigo-500"
+                        className="inline-flex h-9 items-center justify-center rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-900 transition-colors hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
                       >
                         <Eye className="w-4 h-4 mr-2" aria-hidden />
                         Detail
-                      </Button>
+                      </Link>
                     </td>
                   </tr>
                 ))

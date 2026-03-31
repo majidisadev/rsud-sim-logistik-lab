@@ -1,7 +1,6 @@
-import { useEffect, useState, useRef } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import anime from 'animejs';
-import api from '../lib/api';
 import {
   Eye,
   Search,
@@ -17,42 +16,73 @@ import {
 } from 'lucide-react';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import useSWR from 'swr';
+import { useDebouncedValue } from '../lib/hooks/useDebouncedValue';
+import { useToast } from '../components/ui/toast';
+import { usePrefersReducedMotion } from '../lib/hooks/usePrefersReducedMotion';
 
 const TABLE_COLUMNS = 7;
 
+function SortIcon({
+  columnKey,
+  activeSortKey,
+  direction,
+}: {
+  columnKey: string;
+  activeSortKey?: string;
+  direction?: 'asc' | 'desc';
+}) {
+  if (activeSortKey !== columnKey) {
+    return (
+      <ArrowUpDown
+        className="w-3.5 h-3.5 text-gray-400 ml-1 inline-block opacity-60"
+        aria-hidden
+      />
+    );
+  }
+  return direction === 'asc' ? (
+    <ArrowUp className="w-3.5 h-3.5 text-primary ml-1 inline-block" aria-hidden />
+  ) : (
+    <ArrowDown className="w-3.5 h-3.5 text-primary ml-1 inline-block" aria-hidden />
+  );
+}
+
 export default function AllItems() {
-  const navigate = useNavigate();
+  const { toast } = useToast();
+  const reduceMotion = usePrefersReducedMotion();
   const [searchParams] = useSearchParams();
-  const [items, setItems] = useState<any[]>([]);
-  const [totalFilteredCount, setTotalFilteredCount] = useState(0);
-  const [categories, setCategories] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
+  const debouncedSearch = useDebouncedValue(search, 300);
 
   const pageRef = useRef<HTMLDivElement>(null);
   const filterCardRef = useRef<HTMLDivElement>(null);
   const tableCardRef = useRef<HTMLDivElement>(null);
   const tableBodyRef = useRef<HTMLTableSectionElement>(null);
   const rowRefs = useRef<HTMLTableRowElement[]>([]);
+  const prevAnimatedPageRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    fetchCategories();
-  }, []);
+  const itemQueryParams = useMemo(() => {
+    const params: Record<string, unknown> = {
+      expired: searchParams.get('expired') || undefined,
+      soon_expired: searchParams.get('soon_expired') || undefined,
+      out_of_stock: searchParams.get('out_of_stock') || undefined,
+      low_stock: searchParams.get('low_stock') || undefined,
+    };
+    if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
+    return params;
+  }, [searchParams, debouncedSearch]);
 
-  useEffect(() => {
-    fetchItems();
-  }, [searchParams, pageSize, currentPage, sortConfig, selectedCategories, search]);
+  const { data: categories = [] as any[] } = useSWR<any[]>('/categories');
+  const { data: allItems = [] as any[], isLoading: loading } = useSWR<any[]>(['/items', itemQueryParams]);
 
   // Entrance animations on mount
   useEffect(() => {
+    if (reduceMotion) return;
     if (!pageRef.current || !filterCardRef.current || !tableCardRef.current) return;
     anime({
       targets: pageRef.current,
@@ -77,12 +107,54 @@ export default function AllItems() {
       delay: 160,
       easing: 'easeOutCubic',
     });
-  }, []);
+  }, [reduceMotion]);
 
-  // Stagger rows when items change (after load)
+  const filteredItems: any[] = useMemo(() => {
+    if (selectedCategories.length === 0) return allItems;
+    const set = new Set(selectedCategories);
+    return allItems.filter((item) => set.has(String(item.category_id ?? '')));
+  }, [allItems, selectedCategories]);
+
+  const sortedItems: any[] = useMemo(() => {
+    if (!sortConfig) return filteredItems;
+    const { key, direction } = sortConfig;
+
+    const toComparable = (val: any) => {
+      if (key === 'expiration_date' || key === 'last_opname_date') {
+        return val ? new Date(val).getTime() : 0;
+      }
+      return val ?? '';
+    };
+
+    const sign = direction === 'asc' ? 1 : -1;
+    const arr = [...filteredItems];
+    arr.sort((a: any, b: any) => {
+      const aVal = toComparable(a[key]);
+      const bVal = toComparable(b[key]);
+      if (aVal < bVal) return -1 * sign;
+      if (aVal > bVal) return 1 * sign;
+      return 0;
+    });
+    return arr;
+  }, [filteredItems, sortConfig]);
+
+  const totalFilteredCount = sortedItems.length;
+  const totalPages = Math.max(1, Math.ceil(totalFilteredCount / pageSize));
+
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    const end = start + pageSize;
+    return sortedItems.slice(start, end);
+  }, [sortedItems, currentPage, pageSize]);
+
+  // Stagger rows when page changes (after load)
   useEffect(() => {
-    if (loading || items.length === 0) return;
-    rowRefs.current = rowRefs.current.slice(0, items.length);
+    if (reduceMotion) return;
+    if (loading || paginatedItems.length === 0) return;
+    if (prevAnimatedPageRef.current === currentPage) return;
+    prevAnimatedPageRef.current = currentPage;
+
+    rowRefs.current = rowRefs.current.slice(0, paginatedItems.length);
     const targets = rowRefs.current.filter(Boolean);
     if (targets.length === 0) return;
     anime({
@@ -93,66 +165,8 @@ export default function AllItems() {
       delay: anime.stagger(30, { start: 80 }),
       easing: 'easeOutCubic',
     });
-  }, [loading, items]);
+  }, [loading, paginatedItems.length, currentPage, reduceMotion]);
 
-  const fetchCategories = async () => {
-    try {
-      const res = await api.get('/categories');
-      setCategories(res.data);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-  };
-
-  const fetchItems = async () => {
-    setLoading(true);
-    try {
-      const params: any = {
-        expired: searchParams.get('expired') || undefined,
-        soon_expired: searchParams.get('soon_expired') || undefined,
-        out_of_stock: searchParams.get('out_of_stock') || undefined,
-        low_stock: searchParams.get('low_stock') || undefined,
-      };
-
-      if (search) params.search = search;
-
-      const res = await api.get('/items', { params });
-      let filteredItems = [...res.data];
-
-      if (selectedCategories.length > 0) {
-        filteredItems = filteredItems.filter((item) =>
-          selectedCategories.includes(item.category_id?.toString())
-        );
-      }
-
-      if (sortConfig) {
-        filteredItems.sort((a, b) => {
-          let aVal = a[sortConfig.key];
-          let bVal = b[sortConfig.key];
-
-          if (sortConfig.key === 'expiration_date' || sortConfig.key === 'last_opname_date') {
-            aVal = aVal ? new Date(aVal).getTime() : 0;
-            bVal = bVal ? new Date(bVal).getTime() : 0;
-          }
-
-          if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-          if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-          return 0;
-        });
-      }
-
-      setTotalFilteredCount(filteredItems.length);
-      const start = (currentPage - 1) * pageSize;
-      const end = start + pageSize;
-      setItems(filteredItems.slice(start, end));
-    } catch (error) {
-      console.error('Error fetching items:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const totalPages = Math.max(1, Math.ceil(totalFilteredCount / pageSize));
   const hasActiveFilters =
     search.trim() !== '' || selectedCategories.length > 0 || searchParams.toString() !== '';
 
@@ -174,24 +188,8 @@ export default function AllItems() {
   const exportToExcel = async () => {
     setExporting('excel');
     try {
-      const params: any = {
-        expired: searchParams.get('expired') || undefined,
-        soon_expired: searchParams.get('soon_expired') || undefined,
-        out_of_stock: searchParams.get('out_of_stock') || undefined,
-        low_stock: searchParams.get('low_stock') || undefined,
-      };
-      if (search) params.search = search;
-
-      const res = await api.get('/items', { params });
-      let allItems = [...res.data];
-
-      if (selectedCategories.length > 0) {
-        allItems = allItems.filter((item) =>
-          selectedCategories.includes(item.category_id?.toString())
-        );
-      }
-
-      const data = allItems.map((item) => ({
+      const XLSX = await import('xlsx');
+      const data = sortedItems.map((item: any) => ({
         Barang: item.name,
         Kategori: item.category_name || '-',
         Stock: item.total_stock,
@@ -208,7 +206,7 @@ export default function AllItems() {
       XLSX.writeFile(wb, 'barang.xlsx');
     } catch (error) {
       console.error('Error exporting to Excel:', error);
-      alert('Gagal mengekspor ke Excel');
+      toast({ variant: 'error', title: 'Gagal mengekspor ke Excel' });
     } finally {
       setExporting(null);
     }
@@ -217,27 +215,15 @@ export default function AllItems() {
   const exportToPDF = async () => {
     setExporting('pdf');
     try {
-      const params: any = {
-        expired: searchParams.get('expired') || undefined,
-        soon_expired: searchParams.get('soon_expired') || undefined,
-        out_of_stock: searchParams.get('out_of_stock') || undefined,
-        low_stock: searchParams.get('low_stock') || undefined,
-      };
-      if (search) params.search = search;
-
-      const res = await api.get('/items', { params });
-      let allItems = [...res.data];
-
-      if (selectedCategories.length > 0) {
-        allItems = allItems.filter((item) =>
-          selectedCategories.includes(item.category_id?.toString())
-        );
-      }
+      const [{ default: jsPDF }, _autoTable] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ]);
 
       const doc = new jsPDF();
       doc.text('Daftar Barang', 14, 15);
 
-      const tableData = allItems.map((item) => [
+      const tableData = sortedItems.map((item: any) => [
         item.name,
         item.category_name || '-',
         item.total_stock.toString(),
@@ -257,7 +243,7 @@ export default function AllItems() {
       doc.save('barang.pdf');
     } catch (error) {
       console.error('Error exporting to PDF:', error);
-      alert('Gagal mengekspor ke PDF');
+      toast({ variant: 'error', title: 'Gagal mengekspor ke PDF' });
     } finally {
       setExporting(null);
     }
@@ -266,19 +252,6 @@ export default function AllItems() {
   const isExpired = (expirationDate: string | null) => {
     if (!expirationDate) return false;
     return new Date(expirationDate) < new Date();
-  };
-
-  const SortIcon = ({ columnKey }: { columnKey: string }) => {
-    if (sortConfig?.key !== columnKey) {
-      return (
-        <ArrowUpDown className="w-3.5 h-3.5 text-gray-400 ml-1 inline-block opacity-60" aria-hidden />
-      );
-    }
-    return sortConfig.direction === 'asc' ? (
-      <ArrowUp className="w-3.5 h-3.5 text-primary ml-1 inline-block" aria-hidden />
-    ) : (
-      <ArrowDown className="w-3.5 h-3.5 text-primary ml-1 inline-block" aria-hidden />
-    );
   };
 
   return (
@@ -332,13 +305,13 @@ export default function AllItems() {
               />
               <Input
                 type="search"
+                name="search"
                 placeholder="Cari barang..."
                 value={search}
                 onChange={(e) => {
                   setSearch(e.target.value);
                   setCurrentPage(1);
                 }}
-                onKeyDown={(e) => e.key === 'Enter' && fetchItems()}
                 className="pl-10 w-full"
                 aria-label="Cari barang berdasarkan nama"
                 autoComplete="off"
@@ -400,6 +373,7 @@ export default function AllItems() {
                 Tampilkan per halaman
               </label>
               <select
+                  name="page_size"
                 value={pageSize}
                 onChange={(e) => {
                   setPageSize(Number(e.target.value));
@@ -436,7 +410,11 @@ export default function AllItems() {
                       aria-sort={sortConfig?.key === 'name' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : undefined}
                     >
                       Barang
-                      <SortIcon columnKey="name" />
+                      <SortIcon
+                        columnKey="name"
+                        activeSortKey={sortConfig?.key}
+                        direction={sortConfig?.direction}
+                      />
                     </button>
                   </th>
                   <th
@@ -450,7 +428,11 @@ export default function AllItems() {
                       aria-sort={sortConfig?.key === 'category_name' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : undefined}
                     >
                       Kategori
-                      <SortIcon columnKey="category_name" />
+                      <SortIcon
+                        columnKey="category_name"
+                        activeSortKey={sortConfig?.key}
+                        direction={sortConfig?.direction}
+                      />
                     </button>
                   </th>
                   <th
@@ -464,7 +446,11 @@ export default function AllItems() {
                       aria-sort={sortConfig?.key === 'expiration_date' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : undefined}
                     >
                       Kadaluarsa
-                      <SortIcon columnKey="expiration_date" />
+                      <SortIcon
+                        columnKey="expiration_date"
+                        activeSortKey={sortConfig?.key}
+                        direction={sortConfig?.direction}
+                      />
                     </button>
                   </th>
                   <th
@@ -478,12 +464,16 @@ export default function AllItems() {
                       aria-sort={sortConfig?.key === 'total_stock' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : undefined}
                     >
                       Stock
-                      <SortIcon columnKey="total_stock" />
+                      <SortIcon
+                        columnKey="total_stock"
+                        activeSortKey={sortConfig?.key}
+                        direction={sortConfig?.direction}
+                      />
                     </button>
                   </th>
                   <th
                     scope="col"
-                    className="px-5 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider normal-case"
+                    className="px-5 py-3.5 text-left text-xs font-semibold text-gray-600 tracking-wider"
                   >
                     Satuan
                   </th>
@@ -498,7 +488,11 @@ export default function AllItems() {
                       aria-sort={sortConfig?.key === 'last_opname_date' ? (sortConfig.direction === 'asc' ? 'ascending' : 'descending') : undefined}
                     >
                       Tanggal Opname
-                      <SortIcon columnKey="last_opname_date" />
+                      <SortIcon
+                        columnKey="last_opname_date"
+                        activeSortKey={sortConfig?.key}
+                        direction={sortConfig?.direction}
+                      />
                     </button>
                   </th>
                   <th scope="col" className="px-5 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
@@ -520,7 +514,7 @@ export default function AllItems() {
                       </tr>
                     ))}
                   </>
-                ) : items.length === 0 ? (
+                ) : paginatedItems.length === 0 ? (
                   <tr>
                     <td colSpan={TABLE_COLUMNS} className="px-5 py-16 text-center">
                       <div
@@ -542,7 +536,7 @@ export default function AllItems() {
                     </td>
                   </tr>
                 ) : (
-                  items.map((item, index) => (
+                  paginatedItems.map((item: any, index: number) => (
                     <tr
                       key={item.id}
                       ref={(el) => {
@@ -595,16 +589,14 @@ export default function AllItems() {
                           : '–'}
                       </td>
                       <td className="px-5 py-4">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/barang/${item.id}`)}
+                        <Link
+                          to={`/barang/${item.id}`}
                           aria-label={`Lihat detail ${item.name}`}
-                          className="gap-1.5"
+                          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
                         >
                           <Eye className="w-4 h-4" aria-hidden />
                           Detail
-                        </Button>
+                        </Link>
                       </td>
                     </tr>
                   ))
@@ -614,7 +606,7 @@ export default function AllItems() {
           </div>
 
           {/* Pagination */}
-          {!loading && items.length > 0 && totalPages > 1 && (
+          {!loading && paginatedItems.length > 0 && totalPages > 1 && (
             <div
               className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 bg-gray-50/50 border-t border-gray-100"
               role="navigation"
