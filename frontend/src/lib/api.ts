@@ -51,7 +51,17 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    const status = error.response?.status;
+    const requestUrl: string | undefined = error.config?.url;
+    const isAuthLoginRequest =
+      typeof requestUrl === 'string' && requestUrl.replace(/^\//, '').startsWith('auth/login');
+    const isOnLoginPage =
+      typeof window !== 'undefined' && window.location?.pathname?.startsWith('/login');
+
+    // For expired/invalid sessions, redirect to login.
+    // But do NOT redirect when the user is actively trying to log in,
+    // otherwise the real login failure reason can't be shown on the form.
+    if ((status === 401 || status === 403) && !isAuthLoginRequest && !isOnLoginPage) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';

@@ -55,7 +55,7 @@ router.get("/", async (req, res) => {
               AND l2.expiration_date IS NOT NULL
           ) x
         ) as expiration_dates,
-        (SELECT MAX(opname_date) FROM stock_opnames so
+        (SELECT MAX(opname_date)::text FROM stock_opnames so
          INNER JOIN stock_opname_items soi ON soi.stock_opname_id = so.id
          WHERE soi.item_id = i.id) as last_opname_date,
         COALESCE(
@@ -151,7 +151,17 @@ router.get("/:id", async (req, res) => {
 
     // Get lots
     const lotsResult = await pool.query(
-      "SELECT * FROM lots WHERE item_id = $1 ORDER BY created_at DESC",
+      `SELECT
+         id,
+         item_id,
+         lot_number,
+         expiration_date::text as expiration_date,
+         stock,
+         created_at,
+         updated_at
+       FROM lots
+       WHERE item_id = $1
+       ORDER BY created_at DESC`,
       [id]
     );
 
@@ -163,7 +173,7 @@ router.get("/:id", async (req, res) => {
 
     // Get last opname date
     const opnameResult = await pool.query(
-      `SELECT MAX(opname_date) as last_opname_date
+      `SELECT MAX(opname_date)::text as last_opname_date
        FROM stock_opnames so
        INNER JOIN stock_opname_items soi ON soi.stock_opname_id = so.id
        WHERE soi.item_id = $1`,
@@ -650,7 +660,17 @@ router.get("/:id/lots", async (req, res) => {
   try {
     const { id } = req.params;
     const result = await pool.query(
-      "SELECT * FROM lots WHERE item_id = $1 ORDER BY created_at DESC",
+      `SELECT
+         id,
+         item_id,
+         lot_number,
+         expiration_date::text as expiration_date,
+         stock,
+         created_at,
+         updated_at
+       FROM lots
+       WHERE item_id = $1
+       ORDER BY created_at DESC`,
       [id]
     );
     res.json(result.rows);

@@ -11,7 +11,6 @@ const BarangMasuk = lazy(() => import('./pages/BarangMasuk'));
 const BarangKeluar = lazy(() => import('./pages/BarangKeluar'));
 const Laporan = lazy(() => import('./pages/Laporan'));
 const StockOpname = lazy(() => import('./pages/StockOpname'));
-const StockOpnameDetail = lazy(() => import('./pages/StockOpnameDetail'));
 const PengaturanAkun = lazy(() => import('./pages/PengaturanAkun'));
 const PengaturanSupplier = lazy(() => import('./pages/PengaturanSupplier'));
 const PengaturanKategori = lazy(() => import('./pages/PengaturanKategori'));
@@ -63,7 +62,6 @@ function AppRoutes() {
           <Route path="barang-keluar" element={<BarangKeluar />} />
           <Route path="laporan" element={<Laporan />} />
           <Route path="stock-opname" element={<StockOpname />} />
-          <Route path="stock-opname/:id" element={<StockOpnameDetail />} />
           <Route
             path="pengaturan/akun"
             element={

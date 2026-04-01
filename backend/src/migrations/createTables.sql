@@ -86,6 +86,30 @@ CREATE TABLE IF NOT EXISTS stock_opname_items (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Extend Stock Opname Items for temperature fields (idempotent)
+ALTER TABLE stock_opname_items
+  ADD COLUMN IF NOT EXISTS recorded_temperature VARCHAR(50);
+
+ALTER TABLE stock_opname_items
+  ADD COLUMN IF NOT EXISTS opname_temperature VARCHAR(50);
+
+ALTER TABLE stock_opname_items
+  ADD COLUMN IF NOT EXISTS temperature_match VARCHAR(20)
+  CHECK (temperature_match IN ('Sesuai', 'Tidak sesuai'));
+
+-- Stock Opname Item Lots (multi-lot per item opname)
+CREATE TABLE IF NOT EXISTS stock_opname_item_lots (
+  id SERIAL PRIMARY KEY,
+  stock_opname_item_id INTEGER NOT NULL REFERENCES stock_opname_items(id) ON DELETE CASCADE,
+  lot_id INTEGER NOT NULL REFERENCES lots(id) ON DELETE RESTRICT,
+  recorded_lot_stock INTEGER NOT NULL,
+  opname_lot_stock INTEGER NOT NULL,
+  recorded_expiration DATE,
+  opname_expiration DATE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(stock_opname_item_id, lot_id)
+);
+
 -- Create Transactions table (for both masuk and keluar)
 CREATE TABLE IF NOT EXISTS transactions (
   id SERIAL PRIMARY KEY,
@@ -108,4 +132,6 @@ CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
 CREATE INDEX IF NOT EXISTS idx_transactions_created ON transactions(created_at);
 CREATE INDEX IF NOT EXISTS idx_stock_opname_items_opname ON stock_opname_items(stock_opname_id);
 CREATE INDEX IF NOT EXISTS idx_stock_opname_items_item ON stock_opname_items(item_id);
+CREATE INDEX IF NOT EXISTS idx_stock_opname_item_lots_item ON stock_opname_item_lots(stock_opname_item_id);
+CREATE INDEX IF NOT EXISTS idx_stock_opname_item_lots_lot ON stock_opname_item_lots(lot_id);
 

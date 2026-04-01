@@ -104,7 +104,31 @@ export default function Login() {
         navigate("/dashboard");
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || "Login gagal. Periksa username dan password.");
+      const rawError = err?.response?.data?.error;
+      const status = err?.response?.status;
+
+      if (typeof rawError === "string" && rawError.trim()) {
+        // Map backend errors to clearer Indonesian messages
+        if (rawError === "Invalid credentials") {
+          setError("Username atau password salah.");
+        } else if (rawError === "Account is inactive") {
+          setError("Akun Anda tidak aktif. Hubungi Admin.");
+        } else if (rawError === "Username and password required") {
+          setError("Username dan password wajib diisi.");
+        } else if (rawError === "Internal server error") {
+          setError("Terjadi kesalahan pada server. Coba lagi beberapa saat.");
+        } else {
+          setError(rawError);
+        }
+      } else if (status === 401) {
+        setError("Username atau password salah.");
+      } else if (status === 403) {
+        setError("Anda tidak memiliki akses atau akun tidak aktif. Hubungi Admin.");
+      } else if (err?.request && !err?.response) {
+        setError("Tidak dapat terhubung ke server. Periksa koneksi atau alamat server.");
+      } else {
+        setError("Login gagal. Periksa username dan password.");
+      }
     } finally {
       setLoading(false);
     }
@@ -196,6 +220,7 @@ export default function Login() {
             {error && (
               <div
                 ref={errorRef}
+                id="login-error"
                 role="alert"
                 aria-live="assertive"
                 className="mb-5 p-4 bg-red-50 border border-red-200 text-red-800 rounded-xl text-sm flex items-start gap-3"
