@@ -35,7 +35,7 @@ export default function ItemDetail() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
-  const { confirm, dialog } = useConfirmDialog();
+  const { dialog } = useConfirmDialog();
   const reduceMotion = usePrefersReducedMotion();
   const [item, setItem] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -81,6 +81,25 @@ export default function ItemDetail() {
     suppliers: [] as string[],
   });
   const editNameInputRef = useRef<HTMLInputElement | null>(null);
+
+  const expirationListText = useMemo(() => {
+    const lots = Array.isArray(item?.lots) ? item.lots : [];
+    const active = lots.filter(
+      (l: any) => Number(l?.stock) > 0 && l?.expiration_date,
+    );
+
+    const uniqueTimes = new Set<number>();
+    for (const l of active) {
+      const t = new Date(l.expiration_date).getTime();
+      if (!Number.isNaN(t)) uniqueTimes.add(t);
+    }
+
+    const formatted = Array.from(uniqueTimes)
+      .sort((a, b) => a - b)
+      .map((t) => new Date(t).toLocaleDateString("id-ID"));
+
+    return formatted.length ? formatted.join(", ") : "-";
+  }, [item?.lots]);
 
   const pageRef = useRef<HTMLDivElement>(null);
   const headerCardRef = useRef<HTMLElement>(null);
@@ -163,7 +182,14 @@ export default function ItemDetail() {
       delay: anime.stagger(25, { start: 400 }),
       easing: "easeOutCubic",
     });
-  }, [loading, item, allTransactions.length, currentPage, itemsPerPage, reduceMotion]);
+  }, [
+    loading,
+    item,
+    allTransactions.length,
+    currentPage,
+    itemsPerPage,
+    reduceMotion,
+  ]);
 
   const fetchItem = async () => {
     try {
@@ -337,7 +363,14 @@ export default function ItemDetail() {
         // x/y/w/h dalam mm — y disesuaikan agar logo lebih sejajar vertikal dengan blok teks kop
         const logoSizeMm = 18;
         const logoYMm = 12;
-        doc.addImage(logoDataUrl, "PNG", marginX, logoYMm, logoSizeMm, logoSizeMm);
+        doc.addImage(
+          logoDataUrl,
+          "PNG",
+          marginX,
+          logoYMm,
+          logoSizeMm,
+          logoSizeMm,
+        );
       }
 
       // Header / Kop (match the attached stock card template text)
@@ -650,28 +683,6 @@ export default function ItemDetail() {
     }
   };
 
-  const handleDeleteLot = async (lotId: number) => {
-    const ok = await confirm({
-      title: "Hapus lot?",
-      description: "Tindakan ini tidak bisa dibatalkan.",
-      confirmText: "Ya, hapus",
-      cancelText: "Batal",
-      variant: "destructive",
-    });
-    if (!ok) return;
-    try {
-      await api.delete(`/items/${id}/lots/${lotId}`);
-      fetchItem();
-      toast({ variant: "success", title: "Lot berhasil dihapus" });
-    } catch (error: any) {
-      toast({
-        variant: "error",
-        title: "Gagal menghapus lot",
-        description: getErrorMessage(error, "Error deleting lot"),
-      });
-    }
-  };
-
   const txStart = (currentPage - 1) * itemsPerPage;
   const txCount = Math.min(
     itemsPerPage,
@@ -809,11 +820,7 @@ export default function ItemDetail() {
                         : ""
                     }`}
                   >
-                    {item.expiration_date
-                      ? new Date(item.expiration_date).toLocaleDateString(
-                          "id-ID",
-                        )
-                      : "-"}
+                    {expirationListText}
                   </dd>
                 </div>
                 <div>
@@ -934,17 +941,6 @@ export default function ItemDetail() {
                           >
                             <Edit className="w-4 h-4" aria-hidden />
                           </Button>
-                          {(user?.role === "Admin" ||
-                            user?.role === "PJ Gudang") && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDeleteLot(lot.id)}
-                              aria-label={`Hapus lot ${lot.lot_number}`}
-                            >
-                              <X className="w-4 h-4" aria-hidden />
-                            </Button>
-                          )}
                         </div>
                       </td>
                     </tr>
@@ -1409,7 +1405,9 @@ export default function ItemDetail() {
             <Input
               type="url"
               value={editForm.image}
-              onChange={(e) => setEditForm({ ...editForm, image: e.target.value })}
+              onChange={(e) =>
+                setEditForm({ ...editForm, image: e.target.value })
+              }
               placeholder="Masukkan URL gambar"
             />
             {editForm.image && (

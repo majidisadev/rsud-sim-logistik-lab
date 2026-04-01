@@ -80,6 +80,30 @@ export default function AllItems() {
   const { data: categories = [] as any[] } = useSWR<any[]>('/categories');
   const { data: allItems = [] as any[], isLoading: loading } = useSWR<any[]>(['/items', itemQueryParams]);
 
+  const formatExpirationList = (item: any) => {
+    const list = Array.isArray(item?.expiration_dates)
+      ? item.expiration_dates
+      : undefined;
+
+    const dates =
+      list && list.length > 0
+        ? list
+        : item?.expiration_date
+          ? [item.expiration_date]
+          : [];
+
+    const formatted = dates
+      .filter(Boolean)
+      .map((d: any) => {
+        const dt = new Date(d);
+        if (Number.isNaN(dt.getTime())) return null;
+        return dt.toLocaleDateString('id-ID');
+      })
+      .filter(Boolean) as string[];
+
+    return formatted.length > 0 ? formatted.join(', ') : '–';
+  };
+
   // Entrance animations on mount
   useEffect(() => {
     if (reduceMotion) return;
@@ -194,9 +218,7 @@ export default function AllItems() {
         Kategori: item.category_name || '-',
         Stock: item.total_stock,
         Satuan: item.unit || '-',
-        Expiration: item.expiration_date
-          ? new Date(item.expiration_date).toLocaleDateString('id-ID')
-          : '-',
+        Expiration: formatExpirationList(item) === '–' ? '-' : formatExpirationList(item),
         Supplier: item.supplier_names || '-',
       }));
 
@@ -228,9 +250,7 @@ export default function AllItems() {
         item.category_name || '-',
         item.total_stock.toString(),
         item.unit || '-',
-        item.expiration_date
-          ? new Date(item.expiration_date).toLocaleDateString('id-ID')
-          : '-',
+        formatExpirationList(item) === '–' ? '-' : formatExpirationList(item),
         item.supplier_names || '-',
       ]);
 
@@ -566,9 +586,7 @@ export default function AllItems() {
                               : 'text-gray-700'
                           }
                         >
-                          {item.expiration_date
-                            ? new Date(item.expiration_date).toLocaleDateString('id-ID')
-                            : '–'}
+                          {formatExpirationList(item)}
                         </span>
                       </td>
                       <td className="px-5 py-4">

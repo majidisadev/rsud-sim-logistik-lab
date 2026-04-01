@@ -8,12 +8,12 @@ const router = express.Router();
 // Helper function to calculate item expiration from lots
 async function getItemExpiration(itemId: number): Promise<Date | null> {
   const result = await pool.query(
-    `SELECT MIN(expiration_date) as earliest_expiration
+    `SELECT MAX(expiration_date) as latest_expiration
      FROM lots
      WHERE item_id = $1 AND stock > 0 AND expiration_date IS NOT NULL`,
     [itemId]
   );
-  return result.rows[0]?.earliest_expiration || null;
+  return result.rows[0]?.latest_expiration || null;
 }
 
 // Helper function to calculate total stock
@@ -45,6 +45,16 @@ router.get("/", async (req, res) => {
         c.name as category_name,
         COALESCE(SUM(l.stock), 0) as total_stock,
         MIN(CASE WHEN l.stock > 0 AND l.expiration_date IS NOT NULL THEN l.expiration_date END) as expiration_date,
+        (
+          SELECT COALESCE(array_agg(x.expiration_date ORDER BY x.expiration_date), '{}'::date[])
+          FROM (
+            SELECT DISTINCT l2.expiration_date
+            FROM lots l2
+            WHERE l2.item_id = i.id
+              AND l2.stock > 0
+              AND l2.expiration_date IS NOT NULL
+          ) x
+        ) as expiration_dates,
         (SELECT MAX(opname_date) FROM stock_opnames so
          INNER JOIN stock_opname_items soi ON soi.stock_opname_id = so.id
          WHERE soi.item_id = i.id) as last_opname_date,
@@ -198,7 +208,6 @@ router.post("/", requireRole("Admin"), async (req, res) => {
       temperature,
       min_stock,
       stock_awal,
-      expiration_date,
       image,
       suppliers,
     } = req.body;
@@ -251,8 +260,8 @@ router.post("/", requireRole("Admin"), async (req, res) => {
       if (stock_awal > 0) {
         await client.query(
           `INSERT INTO lots (item_id, lot_number, expiration_date, stock)
-           VALUES ($1, 'initial', $2, $3)`,
-          [item.id, expiration_date || null, stock_awal]
+           VALUES ($1, 'initial', NULL, $2)`,
+          [item.id, stock_awal]
         );
       } else {
         // Create empty lot

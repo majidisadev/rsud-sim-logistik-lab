@@ -28,7 +28,6 @@ export default function PengaturanBarang() {
     temperature: "",
     min_stock: 1,
     stock_awal: 0,
-    expiration_date: "",
     image: "",
     suppliers: [] as string[],
   });
@@ -321,7 +320,6 @@ export default function PengaturanBarang() {
         temperature: "",
         min_stock: 1,
         stock_awal: 0,
-        expiration_date: "",
         image: "",
         suppliers: [],
       });
@@ -345,7 +343,6 @@ export default function PengaturanBarang() {
       temperature: "",
       min_stock: 1,
       stock_awal: 0,
-      expiration_date: "",
       image: "",
       suppliers: [],
     });
@@ -463,12 +460,6 @@ export default function PengaturanBarang() {
                   scope="col"
                   className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider"
                 >
-                  Expiration
-                </th>
-                <th
-                  scope="col"
-                  className="px-6 py-3.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider"
-                >
                   Stock
                 </th>
                 <th
@@ -494,7 +485,7 @@ export default function PengaturanBarang() {
             <tbody ref={tableBodyRef} className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
+                  <td colSpan={6} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center gap-3 text-gray-500">
                       <div className="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                       <span className="text-sm">Memuat data...</span>
@@ -503,7 +494,7 @@ export default function PengaturanBarang() {
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center">
+                  <td colSpan={6} className="px-6 py-16 text-center">
                     <div className="flex flex-col items-center gap-3 text-gray-500">
                       <Inbox className="w-12 h-12 text-gray-300" aria-hidden />
                       <p className="text-sm font-medium">Belum ada barang</p>
@@ -545,13 +536,6 @@ export default function PengaturanBarang() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-600">
                       {item.category_name || "—"}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-gray-600">
-                      {item.expiration_date
-                        ? new Date(item.expiration_date).toLocaleDateString(
-                            "id-ID",
-                          )
-                        : "—"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-600">
                       {item.total_stock}
@@ -731,20 +715,6 @@ export default function PengaturanBarang() {
                 }
                 min={0}
                 inputMode="numeric"
-              />
-            </div>
-            <div>
-              <label htmlFor="barang-expiration" className="block text-sm font-medium text-gray-700 mb-1.5">
-                Tanggal Kadaluarsa
-              </label>
-              <Input
-                id="barang-expiration"
-                type="date"
-                name="expiration_date"
-                value={form.expiration_date}
-                onChange={(e) =>
-                  setForm({ ...form, expiration_date: e.target.value })
-                }
               />
             </div>
           </div>
