@@ -38,9 +38,9 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggleColl
   ];
 
   const settingsItems = [
-    { path: '/pengaturan/barang', icon: Box, label: 'Pengaturan Barang', roles: ['Admin'] },
-    { path: '/pengaturan/kategori', icon: Tag, label: 'Pengaturan Kategori', roles: ['Admin'] },
-    { path: '/pengaturan/supplier', icon: Truck, label: 'Pengaturan Supplier', roles: ['Admin'] },
+    { path: '/pengaturan/barang', icon: Box, label: 'Pengaturan Barang', roles: ['Admin', 'PJ Gudang'] },
+    { path: '/pengaturan/kategori', icon: Tag, label: 'Pengaturan Kategori', roles: ['Admin', 'PJ Gudang'] },
+    { path: '/pengaturan/supplier', icon: Truck, label: 'Pengaturan Supplier', roles: ['Admin', 'PJ Gudang'] },
     { path: '/pengaturan/akun', icon: Users, label: 'Pengaturan Akun', roles: ['Admin'] },
   ];
 

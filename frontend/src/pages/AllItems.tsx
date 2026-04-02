@@ -5,7 +5,6 @@ import {
   Eye,
   Search,
   FileSpreadsheet,
-  FileText,
   Package,
   ChevronLeft,
   ChevronRight,
@@ -56,7 +55,7 @@ export default function AllItems() {
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
-  const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
+  const [exporting, setExporting] = useState(false);
   const debouncedSearch = useDebouncedValue(search, 300);
 
   const pageRef = useRef<HTMLDivElement>(null);
@@ -210,7 +209,7 @@ export default function AllItems() {
   };
 
   const exportToExcel = async () => {
-    setExporting('excel');
+    setExporting(true);
     try {
       const XLSX = await import('xlsx');
       const data = sortedItems.map((item: any) => ({
@@ -230,42 +229,7 @@ export default function AllItems() {
       console.error('Error exporting to Excel:', error);
       toast({ variant: 'error', title: 'Gagal mengekspor ke Excel' });
     } finally {
-      setExporting(null);
-    }
-  };
-
-  const exportToPDF = async () => {
-    setExporting('pdf');
-    try {
-      const [{ default: jsPDF }, _autoTable] = await Promise.all([
-        import('jspdf'),
-        import('jspdf-autotable'),
-      ]);
-
-      const doc = new jsPDF();
-      doc.text('Daftar Barang', 14, 15);
-
-      const tableData = sortedItems.map((item: any) => [
-        item.name,
-        item.category_name || '-',
-        item.total_stock.toString(),
-        item.unit || '-',
-        formatExpirationList(item) === '–' ? '-' : formatExpirationList(item),
-        item.supplier_names || '-',
-      ]);
-
-      (doc as any).autoTable({
-        head: [['Barang', 'Kategori', 'Stock', 'Satuan', 'Expiration', 'Supplier']],
-        body: tableData,
-        startY: 20,
-      });
-
-      doc.save('barang.pdf');
-    } catch (error) {
-      console.error('Error exporting to PDF:', error);
-      toast({ variant: 'error', title: 'Gagal mengekspor ke PDF' });
-    } finally {
-      setExporting(null);
+      setExporting(false);
     }
   };
 
@@ -292,23 +256,12 @@ export default function AllItems() {
               onClick={exportToExcel}
               variant="outline"
               size="sm"
-              disabled={!!exporting}
+              disabled={exporting}
               aria-label="Ekspor ke Excel"
               className="gap-2"
             >
               <FileSpreadsheet className="w-4 h-4" aria-hidden />
               Excel
-            </Button>
-            <Button
-              onClick={exportToPDF}
-              variant="outline"
-              size="sm"
-              disabled={!!exporting}
-              aria-label="Ekspor ke PDF"
-              className="gap-2"
-            >
-              <FileText className="w-4 h-4" aria-hidden />
-              PDF
             </Button>
           </div>
         </div>

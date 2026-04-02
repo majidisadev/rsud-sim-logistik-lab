@@ -55,8 +55,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create category (Admin only)
-router.post('/', requireRole('Admin'), async (req, res) => {
+// Create category (Admin and PJ Gudang)
+router.post('/', requireRole('Admin', 'PJ Gudang'), async (req, res) => {
   try {
     const { name, cover_image } = req.body;
 
@@ -83,8 +83,8 @@ router.post('/', requireRole('Admin'), async (req, res) => {
   }
 });
 
-// Update category (Admin only)
-router.put('/:id', requireRole('Admin'), async (req, res) => {
+// Update category (Admin and PJ Gudang)
+router.put('/:id', requireRole('Admin', 'PJ Gudang'), async (req, res) => {
   try {
     const { id } = req.params;
     const { name, cover_image } = req.body;
@@ -132,8 +132,8 @@ router.put('/:id', requireRole('Admin'), async (req, res) => {
   }
 });
 
-// Delete category (Admin only)
-router.delete('/:id', requireRole('Admin'), async (req, res) => {
+// Delete category (Admin and PJ Gudang)
+router.delete('/:id', requireRole('Admin', 'PJ Gudang'), async (req, res) => {
   try {
     const { id } = req.params;
 

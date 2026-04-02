@@ -73,7 +73,7 @@ function AppRoutes() {
           <Route
             path="pengaturan/supplier"
             element={
-              <ProtectedRoute allowedRoles={['Admin']}>
+              <ProtectedRoute allowedRoles={['Admin', 'PJ Gudang']}>
                 <PengaturanSupplier />
               </ProtectedRoute>
             }
@@ -81,7 +81,7 @@ function AppRoutes() {
           <Route
             path="pengaturan/supplier/:id"
             element={
-              <ProtectedRoute allowedRoles={['Admin']}>
+              <ProtectedRoute allowedRoles={['Admin', 'PJ Gudang']}>
                 <SupplierDetail />
               </ProtectedRoute>
             }
@@ -89,7 +89,7 @@ function AppRoutes() {
           <Route
             path="pengaturan/kategori"
             element={
-              <ProtectedRoute allowedRoles={['Admin']}>
+              <ProtectedRoute allowedRoles={['Admin', 'PJ Gudang']}>
                 <PengaturanKategori />
               </ProtectedRoute>
             }
@@ -97,7 +97,7 @@ function AppRoutes() {
           <Route
             path="pengaturan/kategori/:id"
             element={
-              <ProtectedRoute allowedRoles={['Admin']}>
+              <ProtectedRoute allowedRoles={['Admin', 'PJ Gudang']}>
                 <KategoriDetail />
               </ProtectedRoute>
             }
@@ -105,7 +105,7 @@ function AppRoutes() {
           <Route
             path="pengaturan/barang"
             element={
-              <ProtectedRoute allowedRoles={['Admin']}>
+              <ProtectedRoute allowedRoles={['Admin', 'PJ Gudang']}>
                 <PengaturanBarang />
               </ProtectedRoute>
             }

@@ -13,7 +13,7 @@ export default function Laporan() {
   const [year, setYear] = useState(new Date().getFullYear().toString());
   const [month, setMonth] = useState((new Date().getMonth() + 1).toString());
   const [searchTerm, setSearchTerm] = useState('');
-  const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const pageRef = useRef<HTMLDivElement>(null);
   const filterCardRef = useRef<HTMLDivElement>(null);
@@ -83,7 +83,7 @@ export default function Laporan() {
   }, [loading, filteredReports.length, reduceMotion]);
 
   const exportToExcel = async () => {
-    setExporting('excel');
+    setExporting(true);
     try {
       const XLSX = await import('xlsx');
       const data = filteredReports.map((r) => ({
@@ -98,41 +98,7 @@ export default function Laporan() {
       XLSX.utils.book_append_sheet(wb, ws, 'Laporan');
       XLSX.writeFile(wb, `laporan-${period}-${year}${period === 'monthly' ? `-${month}` : ''}.xlsx`);
     } finally {
-      setExporting(null);
-    }
-  };
-
-  const exportToPDF = async () => {
-    setExporting('pdf');
-    try {
-      const [{ default: jsPDF }, _autoTable] = await Promise.all([
-        import('jspdf'),
-        import('jspdf-autotable'),
-      ]);
-
-      const doc = new jsPDF();
-      doc.text(
-        `Laporan ${period === 'monthly' ? 'Bulanan' : 'Tahunan'} ${year}${period === 'monthly' ? ` - ${month}` : ''}`,
-        14,
-        15
-      );
-
-      const tableData = filteredReports.map((r) => [
-        r.item_name,
-        r.unit || '-',
-        r.total_masuk.toString(),
-        r.total_keluar.toString(),
-      ]);
-
-      (doc as any).autoTable({
-        head: [['Barang', 'Satuan', 'Jumlah Masuk', 'Jumlah Keluar']],
-        body: tableData,
-        startY: 20,
-      });
-
-      doc.save(`laporan-${period}-${year}${period === 'monthly' ? `-${month}` : ''}.pdf`);
-    } finally {
-      setExporting(null);
+      setExporting(false);
     }
   };
 
@@ -154,21 +120,11 @@ export default function Laporan() {
             onClick={exportToExcel}
             variant="outline"
             size="sm"
-            disabled={loading || filteredReports.length === 0 || exporting !== null}
+            disabled={loading || filteredReports.length === 0 || exporting}
             aria-label="Ekspor ke Excel"
           >
-            <Download className={`w-4 h-4 mr-2 ${exporting === 'excel' ? 'animate-pulse' : ''}`} aria-hidden />
-            {exporting === 'excel' ? 'Mengekspor...' : 'Excel'}
-          </Button>
-          <Button
-            onClick={exportToPDF}
-            variant="outline"
-            size="sm"
-            disabled={loading || filteredReports.length === 0 || exporting !== null}
-            aria-label="Ekspor ke PDF"
-          >
-            <Download className={`w-4 h-4 mr-2 ${exporting === 'pdf' ? 'animate-pulse' : ''}`} aria-hidden />
-            {exporting === 'pdf' ? 'Mengekspor...' : 'PDF'}
+            <Download className={`w-4 h-4 mr-2 ${exporting ? 'animate-pulse' : ''}`} aria-hidden />
+            {exporting ? 'Mengekspor...' : 'Excel'}
           </Button>
         </div>
       </div>

@@ -207,8 +207,8 @@ router.get("/:id", async (req, res) => {
   }
 });
 
-// Create item (Admin only)
-router.post("/", requireRole("Admin"), async (req, res) => {
+// Create item (Admin and PJ Gudang)
+router.post("/", requireRole("Admin", "PJ Gudang"), async (req, res) => {
   try {
     const {
       name,
@@ -314,8 +314,8 @@ router.post("/", requireRole("Admin"), async (req, res) => {
   }
 });
 
-// Bulk import items from Excel (Admin only)
-router.post("/import", requireRole("Admin"), async (req, res) => {
+// Bulk import items from Excel (Admin and PJ Gudang)
+router.post("/import", requireRole("Admin", "PJ Gudang"), async (req, res) => {
   try {
     const { items } = req.body as { items?: Array<any> };
 
@@ -630,8 +630,8 @@ router.put("/:id", requireRole("Admin", "PJ Gudang"), async (req, res) => {
   }
 });
 
-// Toggle item status (Admin only)
-router.patch("/:id/toggle-status", requireRole("Admin"), async (req, res) => {
+// Toggle item status (Admin and PJ Gudang)
+router.patch("/:id/toggle-status", requireRole("Admin", "PJ Gudang"), async (req, res) => {
   try {
     const { id } = req.params;
 

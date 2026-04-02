@@ -53,8 +53,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// Create supplier (Admin only)
-router.post('/', requireRole('Admin'), async (req, res) => {
+// Create supplier (Admin and PJ Gudang)
+router.post('/', requireRole('Admin', 'PJ Gudang'), async (req, res) => {
   try {
     const { name, email, phone, cover_image } = req.body;
 
@@ -81,8 +81,8 @@ router.post('/', requireRole('Admin'), async (req, res) => {
   }
 });
 
-// Update supplier (Admin only)
-router.put('/:id', requireRole('Admin'), async (req, res) => {
+// Update supplier (Admin and PJ Gudang)
+router.put('/:id', requireRole('Admin', 'PJ Gudang'), async (req, res) => {
   try {
     const { id } = req.params;
     const { name, email, phone, cover_image } = req.body;
@@ -140,8 +140,8 @@ router.put('/:id', requireRole('Admin'), async (req, res) => {
   }
 });
 
-// Delete supplier (Admin only)
-router.delete('/:id', requireRole('Admin'), async (req, res) => {
+// Delete supplier (Admin and PJ Gudang)
+router.delete('/:id', requireRole('Admin', 'PJ Gudang'), async (req, res) => {
   try {
     const { id } = req.params;
 
