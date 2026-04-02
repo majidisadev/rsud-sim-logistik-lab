@@ -10,6 +10,7 @@ import {
   X,
   Package,
   Printer,
+  FileSpreadsheet,
 } from "lucide-react";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
@@ -40,6 +41,7 @@ export default function ItemDetail() {
   const [item, setItem] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isPrintingStockCard, setIsPrintingStockCard] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [showLotModal, setShowLotModal] = useState(false);
   const [showEditLotModal, setShowEditLotModal] = useState(false);
   const [showEditItemModal, setShowEditItemModal] = useState(false);
@@ -481,6 +483,73 @@ export default function ItemDetail() {
       toast({ variant: "error", title: "Gagal mencetak kartu stok" });
     } finally {
       setIsPrintingStockCard(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!item) return;
+    setIsExportingExcel(true);
+    try {
+      const XLSX = await import("xlsx");
+      const empty6 = (): (string | number)[] => ["", "", "", "", "", ""];
+
+      const headerRows: (string | number)[][] = [
+        (() => {
+          const r = empty6();
+          r[0] = String(item.name || "-");
+          return r;
+        })(),
+        (() => {
+          const r = empty6();
+          r[0] = String(item.unit || "-");
+          return r;
+        })(),
+        [
+          "Tanggal",
+          "Keterangan",
+          "Masuk",
+          "Keluar",
+          "Sisa",
+          "User",
+        ],
+      ];
+
+      const dataRows = allTransactions.map((tx: any) => {
+        const d = new Date(tx.created_at);
+        const qty = Number(tx.quantity) || 0;
+        const masuk = tx.type === "Masuk" ? qty : "";
+        const keluar = tx.type === "Keluar" ? qty : "";
+        const sisa = sisaByTransactionId.get(Number(tx.id));
+        return [
+          d.toLocaleDateString("id-ID"),
+          tx.notes || "",
+          masuk === "" ? "" : masuk,
+          keluar === "" ? "" : keluar,
+          sisa === undefined ? "" : sisa,
+          tx.user_name || "",
+        ];
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet([...headerRows, ...dataRows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Riwayat");
+
+      const datePart =
+        transactionFilter.start_date || transactionFilter.end_date
+          ? `${transactionFilter.start_date || "awal"}_sd_${transactionFilter.end_date || "akhir"}`
+          : "semua-tanggal";
+      const typePart = transactionFilter.type
+        ? `_${transactionFilter.type.toLowerCase()}`
+        : "";
+      XLSX.writeFile(
+        wb,
+        `riwayat-transaksi_${safeFilePart(item.name || "barang")}_${safeFilePart(datePart)}${typePart}.xlsx`,
+      );
+    } catch (e) {
+      console.error("Error exporting Excel:", e);
+      toast({ variant: "error", title: "Gagal mengekspor ke Excel" });
+    } finally {
+      setIsExportingExcel(false);
     }
   };
 
@@ -1077,6 +1146,18 @@ export default function ItemDetail() {
                   aria-hidden
                 />
                 {isPrintingStockCard ? "Mencetak..." : "Cetak Kartu Stok"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleExportExcel}
+                disabled={loading || !item || isExportingExcel}
+                aria-label="Ekspor riwayat transaksi ke Excel"
+              >
+                <FileSpreadsheet
+                  className={`w-4 h-4 mr-2 ${isExportingExcel ? "animate-pulse" : ""}`}
+                  aria-hidden
+                />
+                {isExportingExcel ? "Mengekspor..." : "Export Excel"}
               </Button>
             </div>
             <div className="ml-auto flex flex-col gap-1">

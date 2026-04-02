@@ -8,6 +8,10 @@ import {
   User,
   Package,
   Loader2,
+  Check,
+  CheckCircle2,
+  XCircle,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { usePrefersReducedMotion } from '../lib/hooks/usePrefersReducedMotion';
 import Dialog from '../components/ui/Dialog';
@@ -15,6 +19,9 @@ import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import { useToast } from '../components/ui/toast';
 import { getErrorMessage } from '../lib/getErrorMessage';
+import { useAuth } from '../contexts/AuthContext';
+
+type ValidationChoice = 'Belum' | 'Disetujui' | 'Tidak disetujui';
 
 type OfficerOption = { officer_id: number; officer_name: string };
 type ItemOption = { id: number; name: string; last_opname_date?: string | null };
@@ -33,6 +40,19 @@ type LotRow = {
   opname_lot_stock: number;
   recorded_expiration: string | null;
   opname_expiration: string | null;
+  stock_validation_status?: string;
+  expiration_validation_status?: string;
+};
+
+type CreateLotRow = {
+  lot_id: number;
+  lot_number: string;
+  recorded_lot_stock: number;
+  recorded_expiration: string | null;
+  selected: boolean;
+  opname_lot_stock: string;
+  opname_expiration: string;
+  in_pending_opname?: boolean;
 };
 
 function normalizeDate(value: string | null | undefined) {
@@ -57,9 +77,91 @@ function formatDdMmYyyyFromDateOnly(value: string | null | undefined) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+function isValidated(status: string | null | undefined) {
+  return Boolean(status && status !== 'Belum');
+}
+
+/** Simbol validasi admin: setuju = ✓, tolak = ✗, belum = kosong */
+function adminValidationSymbol(status: string | null | undefined): string {
+  if (status === 'Disetujui') return '\u2713';
+  if (status === 'Tidak disetujui') return '\u2717';
+  return '';
+}
+
+function formatSuhuBarangForExport(it: {
+  recorded_temperature?: string | null;
+  item_temperature?: string | null;
+  opname_temperature?: string | null;
+  temperature_match?: string | null;
+}) {
+  const rec = it.recorded_temperature ?? it.item_temperature;
+  const parts: string[] = [];
+  parts.push(rec != null && String(rec).trim() !== '' ? String(rec) : '-');
+  if (it.opname_temperature != null && String(it.opname_temperature).trim() !== '') {
+    parts.push(`Opname: ${it.opname_temperature}`);
+  }
+  if (it.temperature_match) parts.push(it.temperature_match);
+  return parts.join(' · ');
+}
+
+function ValidatedFieldLabel({
+  label,
+  validated,
+}: {
+  label: string;
+  validated: boolean;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+      {validated ? (
+        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" strokeWidth={2.5} aria-hidden />
+      ) : null}
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function DecisionButtonGroup({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: ValidationChoice;
+  onChange: (v: ValidationChoice) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Keputusan validasi">
+      <Button
+        type="button"
+        size="sm"
+        variant={value === 'Disetujui' ? 'default' : 'outline'}
+        className="gap-1.5"
+        onClick={() => onChange('Disetujui')}
+        disabled={disabled}
+      >
+        <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+        Setuju
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant={value === 'Tidak disetujui' ? 'destructive' : 'outline'}
+        className="gap-1.5"
+        onClick={() => onChange('Tidak disetujui')}
+        disabled={disabled}
+      >
+        <XCircle className="h-4 w-4 shrink-0" aria-hidden />
+        Tolak
+      </Button>
+    </div>
+  );
+}
+
 export default function StockOpname() {
   const reduceMotion = usePrefersReducedMotion();
   const { toast } = useToast();
+  const { user } = useAuth();
 
   const [opnameItems, setOpnameItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,11 +177,13 @@ export default function StockOpname() {
     officer_id: string;
     date_start: string;
     date_end: string;
+    pending_validation: boolean;
   }>({
     item_id: '',
     officer_id: '',
     date_start: '',
     date_end: '',
+    pending_validation: false,
   });
 
   const [itemsOptions, setItemsOptions] = useState<ItemOption[]>([]);
@@ -91,17 +195,20 @@ export default function StockOpname() {
   const [createItemTemperature, setCreateItemTemperature] = useState<string>(''); // suhu barang (standar)
   const [createOpnameTemperature, setCreateOpnameTemperature] = useState<string>(''); // suhu saat opname
   const [createTemperatureMatch, setCreateTemperatureMatch] = useState<'Sesuai' | 'Tidak sesuai'>('Sesuai');
-  const [createLots, setCreateLots] = useState<
-    Array<{
-      lot_id: number;
-      lot_number: string;
-      recorded_lot_stock: number;
-      recorded_expiration: string | null;
-      selected: boolean;
-      opname_lot_stock: string;
-      opname_expiration: string; // yyyy-mm-dd or ''
-    }>
-  >([]);
+  const [createLots, setCreateLots] = useState<CreateLotRow[]>([]);
+
+  const [validateOpen, setValidateOpen] = useState(false);
+  const [validateOpnameId, setValidateOpnameId] = useState<number | null>(null);
+  const [validateLoading, setValidateLoading] = useState(false);
+  const [validateSaving, setValidateSaving] = useState(false);
+  const [validateDetail, setValidateDetail] = useState<any>(null);
+  const [validateItemDecisions, setValidateItemDecisions] = useState<
+    Record<number, { temperature: ValidationChoice; stock?: ValidationChoice; expiration?: ValidationChoice }>
+  >({});
+  const [validateLotDecisions, setValidateLotDecisions] = useState<
+    Record<number, { stock: ValidationChoice; expiration: ValidationChoice }>
+  >({});
+  const [exporting, setExporting] = useState(false);
 
   const pageRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
@@ -110,7 +217,15 @@ export default function StockOpname() {
 
   useEffect(() => {
     fetchOpnameItems();
-  }, [pagination.page, pagination.limit, filters.item_id, filters.officer_id, filters.date_start, filters.date_end]);
+  }, [
+    pagination.page,
+    pagination.limit,
+    filters.item_id,
+    filters.officer_id,
+    filters.date_start,
+    filters.date_end,
+    filters.pending_validation,
+  ]);
 
   useEffect(() => {
     // load filter dropdown options (barang + petugas)
@@ -198,8 +313,124 @@ export default function StockOpname() {
     if (filters.officer_id) params.officer_id = filters.officer_id;
     if (filters.date_start) params.date_start = filters.date_start;
     if (filters.date_end) params.date_end = filters.date_end;
+    if (filters.pending_validation) params.pending_validation = 'true';
     return params;
-  }, [filters.date_end, filters.date_start, filters.item_id, filters.officer_id, pagination.limit, pagination.page]);
+  }, [
+    filters.date_end,
+    filters.date_start,
+    filters.item_id,
+    filters.officer_id,
+    filters.pending_validation,
+    pagination.limit,
+    pagination.page,
+  ]);
+
+  const exportStockOpnameExcel = async () => {
+    setExporting(true);
+    try {
+      const base: Record<string, string> = {};
+      if (filters.item_id) base.item_id = filters.item_id;
+      if (filters.officer_id) base.officer_id = filters.officer_id;
+      if (filters.date_start) base.date_start = filters.date_start;
+      if (filters.date_end) base.date_end = filters.date_end;
+      if (filters.pending_validation) base.pending_validation = 'true';
+
+      const all: any[] = [];
+      let page = 1;
+      const limit = 100;
+      while (true) {
+        const res = await api.get('/stock-opnames/items', { params: { ...base, page, limit } });
+        const chunk = res.data?.data;
+        const pag = res.data?.pagination;
+        if (Array.isArray(chunk)) all.push(...chunk);
+        const totalPages = Number(pag?.total_pages ?? 1) || 1;
+        if (page >= totalPages) break;
+        page += 1;
+      }
+
+      if (all.length === 0) {
+        toast({ variant: 'error', title: 'Tidak ada data untuk diekspor' });
+        return;
+      }
+
+      const headers = [
+        'Tanggal',
+        'Petugas',
+        'Suhu barang',
+        'Hasil validasi suhu oleh admin',
+        'Barang',
+        'Lot barang',
+        'Stok tercatat',
+        'Stok opname',
+        'Hasil validasi stok oleh admin',
+        'Kadaluarsa tercatat',
+        'Kadaluarsa opname',
+        'Hasil validasi kadaluarsa oleh admin',
+      ];
+
+      const dataRows: (string | number)[][] = [];
+      for (const it of all) {
+        const tanggal = it.opname_date
+          ? formatDdMmYyyyFromDateOnly(String(it.opname_date).slice(0, 10))
+          : '-';
+        const petugas = it.officer_name != null ? String(it.officer_name) : '-';
+        const suhu = formatSuhuBarangForExport(it);
+        const valSuhu = adminValidationSymbol(it.temperature_validation_status);
+        const barang = it.item_name != null ? String(it.item_name) : '-';
+        const lots = Array.isArray(it.lots) ? it.lots : [];
+        if (lots.length === 0) {
+          dataRows.push([
+            tanggal,
+            petugas,
+            suhu,
+            valSuhu,
+            barang,
+            '-',
+            it.recorded_stock ?? '',
+            it.opname_stock ?? '',
+            adminValidationSymbol(it.stock_validation_status),
+            formatDdMmYyyyFromDateOnly(it.recorded_expiration),
+            '-',
+            adminValidationSymbol(it.expiration_validation_status),
+          ]);
+        } else {
+          for (const l of lots) {
+            dataRows.push([
+              tanggal,
+              petugas,
+              suhu,
+              valSuhu,
+              barang,
+              l.lot_number != null ? String(l.lot_number) : '-',
+              l.recorded_lot_stock ?? '',
+              l.opname_lot_stock ?? '',
+              adminValidationSymbol(l.stock_validation_status),
+              formatDdMmYyyyFromDateOnly(l.recorded_expiration),
+              formatDdMmYyyyFromDateOnly(l.opname_expiration),
+              adminValidationSymbol(l.expiration_validation_status),
+            ]);
+          }
+        }
+      }
+
+      const XLSX = await import('xlsx');
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Stock Opname');
+      const datePart = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(wb, `stock-opname_${datePart}.xlsx`);
+      toast({ variant: 'success', title: 'Ekspor Excel berhasil' });
+    } catch (error) {
+      console.error('Export stock opname:', error);
+      toast({
+        variant: 'error',
+        title: 'Gagal mengekspor',
+        description: getErrorMessage(error, 'Gagal mengekspor ke Excel'),
+      });
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const fetchOpnameItems = async () => {
     try {
@@ -230,8 +461,90 @@ export default function StockOpname() {
   };
 
   const resetFilters = () => {
-    setFilters({ item_id: '', officer_id: '', date_start: '', date_end: '' });
+    setFilters({
+      item_id: '',
+      officer_id: '',
+      date_start: '',
+      date_end: '',
+      pending_validation: false,
+    });
     setPagination((p) => ({ ...p, page: 1 }));
+  };
+
+  const openValidate = async (opnameId: number) => {
+    setValidateOpnameId(opnameId);
+    setValidateOpen(true);
+    setValidateLoading(true);
+    setValidateDetail(null);
+    setValidateItemDecisions({});
+    setValidateLotDecisions({});
+    try {
+      const res = await api.get(`/stock-opnames/${opnameId}`);
+      const d = res.data;
+      setValidateDetail(d);
+      const idItems: Record<number, { temperature: ValidationChoice }> = {};
+      const idLots: Record<number, { stock: ValidationChoice; expiration: ValidationChoice }> = {};
+      for (const row of d?.items ?? []) {
+        const base: { temperature: ValidationChoice; stock?: ValidationChoice; expiration?: ValidationChoice } = {
+          temperature: (row.temperature_validation_status as ValidationChoice) ?? 'Belum',
+        };
+        if (!Array.isArray(row.lots) || row.lots.length === 0) {
+          base.stock = (row.stock_validation_status as ValidationChoice) ?? 'Belum';
+          base.expiration = (row.expiration_validation_status as ValidationChoice) ?? 'Belum';
+        }
+        idItems[row.id] = base;
+        for (const lot of row.lots ?? []) {
+          idLots[lot.id] = {
+            stock: (lot.stock_validation_status as ValidationChoice) ?? 'Belum',
+            expiration: (lot.expiration_validation_status as ValidationChoice) ?? 'Belum',
+          };
+        }
+      }
+      setValidateItemDecisions(idItems);
+      setValidateLotDecisions(idLots);
+    } catch (error) {
+      toast({
+        variant: 'error',
+        title: 'Gagal memuat opname',
+        description: getErrorMessage(error, 'Tidak dapat memuat detail stock opname'),
+      });
+      setValidateOpen(false);
+    } finally {
+      setValidateLoading(false);
+    }
+  };
+
+  const submitValidate = async () => {
+    if (validateOpnameId == null) return;
+    try {
+      setValidateSaving(true);
+      const items = Object.entries(validateItemDecisions).map(([sid, v]) => {
+        const o: Record<string, unknown> = {
+          stock_opname_item_id: Number(sid),
+          temperature_validation_status: v.temperature,
+        };
+        if (v.stock !== undefined) o.stock_validation_status = v.stock;
+        if (v.expiration !== undefined) o.expiration_validation_status = v.expiration;
+        return o;
+      });
+      const lots = Object.entries(validateLotDecisions).map(([lid, v]) => ({
+        stock_opname_item_lot_id: Number(lid),
+        stock_validation_status: v.stock,
+        expiration_validation_status: v.expiration,
+      }));
+      await api.patch(`/stock-opnames/${validateOpnameId}/validate`, { items, lots });
+      toast({ variant: 'success', title: 'Validasi disimpan' });
+      setValidateOpen(false);
+      await fetchOpnameItems();
+    } catch (error) {
+      toast({
+        variant: 'error',
+        title: 'Gagal menyimpan validasi',
+        description: getErrorMessage(error, 'Validasi gagal'),
+      });
+    } finally {
+      setValidateSaving(false);
+    }
   };
 
   const openCreate = () => {
@@ -254,7 +567,8 @@ export default function StockOpname() {
     try {
       const res = await api.get(`/items/${idNum}`);
       setCreateItemTemperature(res.data?.temperature ? String(res.data.temperature) : '');
-      const lots = Array.isArray(res.data?.lots) ? res.data.lots : [];
+      const lotsRes = await api.get(`/items/${idNum}/lots`);
+      const lots = Array.isArray(lotsRes.data) ? lotsRes.data : [];
       setCreateLots(
         lots.map((l: any) => {
           const recordedExpiration = l.expiration_date ? String(l.expiration_date) : null;
@@ -267,6 +581,7 @@ export default function StockOpname() {
             selected: false,
             opname_lot_stock: String(Number.isFinite(recordedStock) ? recordedStock : 0),
             opname_expiration: recordedExpiration ? normalizeDate(recordedExpiration) ?? '' : '',
+            in_pending_opname: Boolean(l.in_pending_opname),
           };
         })
       );
@@ -284,6 +599,7 @@ export default function StockOpname() {
     const selected = createLots.filter((l) => l.selected);
     if (selected.length === 0) return false;
     for (const l of selected) {
+      if (l.in_pending_opname) return false;
       if (l.opname_lot_stock === '' || !Number.isFinite(Number(l.opname_lot_stock))) return false;
       if (Number(l.opname_lot_stock) < 0) return false;
     }
@@ -446,11 +762,14 @@ export default function StockOpname() {
                           }}
                           className="h-4 w-4"
                           aria-label={`Pilih lot ${l.lot_number}`}
-                          disabled={creating}
+                          disabled={creating || l.in_pending_opname}
                         />
                       </div>
                       <div className="col-span-3">
                         <p className="text-sm font-medium text-foreground">{l.lot_number}</p>
+                        {l.in_pending_opname ? (
+                          <p className="text-xs text-amber-600 mt-0.5">Menunggu validasi admin</p>
+                        ) : null}
                       </div>
                       <div className="col-span-2">
                         <p className="text-sm text-foreground">{l.recorded_lot_stock}</p>
@@ -497,6 +816,197 @@ export default function StockOpname() {
         </div>
       </Dialog>
 
+      <Dialog
+        open={validateOpen}
+        onClose={() => (validateSaving ? null : setValidateOpen(false))}
+        title="Validasi stock opname (Admin)"
+        description="Tentukan persetujuan per suhu, stok lot, dan kadaluarsa lot. Hanya field yang disetujui yang diterapkan ke sistem."
+        size="lg"
+      >
+        {validateLoading ? (
+          <div className="flex justify-center py-12 text-muted-foreground">
+            <Loader2 className="h-8 w-8 animate-spin" aria-hidden />
+          </div>
+        ) : validateDetail ? (
+          <div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
+            <p className="text-sm text-muted-foreground">
+              Opname #{validateDetail.id} •{' '}
+              {validateDetail.opname_date
+                ? new Date(validateDetail.opname_date).toLocaleDateString('id-ID')
+                : ''}{' '}
+              • {validateDetail.officer_name}
+            </p>
+            {(validateDetail.items ?? []).map((row: any) => (
+              <div key={row.id} className="rounded-xl border border-border bg-card p-4 space-y-4">
+                <p className="font-medium text-foreground">{row.item_name}</p>
+
+                <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Suhu</p>
+                  <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+                    <div>
+                      <span className="text-xs text-muted-foreground">Suhu barang</span>
+                      <p className="font-medium text-foreground">
+                        {row.recorded_temperature ?? row.item_temperature ?? '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">Suhu opname</span>
+                      <p className="font-medium text-foreground">{row.opname_temperature ?? '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">Keterangan opname</span>
+                      <p className="font-medium text-foreground">
+                        {row.temperature_match ? (
+                          <span
+                            className={
+                              row.temperature_match === 'Sesuai'
+                                ? 'text-emerald-700'
+                                : 'text-rose-700'
+                            }
+                          >
+                            {row.temperature_match}
+                          </span>
+                        ) : (
+                          '-'
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">Keputusan validasi suhu</p>
+                    <DecisionButtonGroup
+                      value={validateItemDecisions[row.id]?.temperature ?? 'Belum'}
+                      onChange={(v) =>
+                        setValidateItemDecisions((prev) => ({
+                          ...prev,
+                          [row.id]: { ...prev[row.id], temperature: v },
+                        }))
+                      }
+                      disabled={validateSaving}
+                    />
+                  </div>
+                </div>
+
+                {(row.lots ?? []).length > 0 ? (
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase">Per lot</p>
+                    {(row.lots ?? []).map((lot: any) => (
+                      <div key={lot.id} className="rounded-lg border border-border bg-background p-4 space-y-4">
+                        <p className="text-sm font-medium text-foreground">{lot.lot_number}</p>
+
+                        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                          <div className="space-y-2 rounded-md border border-border bg-card p-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">Tercatat</p>
+                            <p className="text-sm">
+                              <span className="text-muted-foreground">Stock:</span>{' '}
+                              <span className="font-medium">{lot.recorded_lot_stock}</span>
+                            </p>
+                            <p className="text-sm">
+                              <span className="text-muted-foreground">Kadaluarsa:</span>{' '}
+                              <span className="font-medium">
+                                {formatDdMmYyyyFromDateOnly(lot.recorded_expiration)}
+                              </span>
+                            </p>
+                          </div>
+                          <div className="space-y-2 rounded-md border border-border bg-card p-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">Opname</p>
+                            <p className="text-sm">
+                              <span className="text-muted-foreground">Stock:</span>{' '}
+                              <span className="font-medium">{lot.opname_lot_stock}</span>
+                            </p>
+                            <p className="text-sm">
+                              <span className="text-muted-foreground">Kadaluarsa:</span>{' '}
+                              <span className="font-medium">
+                                {formatDdMmYyyyFromDateOnly(lot.opname_expiration)}
+                              </span>
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-4 border-t border-border pt-3 sm:grid-cols-2">
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">Validasi stok</p>
+                            <DecisionButtonGroup
+                              value={validateLotDecisions[lot.id]?.stock ?? 'Belum'}
+                              onChange={(v) =>
+                                setValidateLotDecisions((prev) => ({
+                                  ...prev,
+                                  [lot.id]: {
+                                    stock: v,
+                                    expiration: prev[lot.id]?.expiration ?? 'Belum',
+                                  },
+                                }))
+                              }
+                              disabled={validateSaving}
+                            />
+                          </div>
+                          <div>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">Validasi kadaluarsa</p>
+                            <DecisionButtonGroup
+                              value={validateLotDecisions[lot.id]?.expiration ?? 'Belum'}
+                              onChange={(v) =>
+                                setValidateLotDecisions((prev) => ({
+                                  ...prev,
+                                  [lot.id]: {
+                                    stock: prev[lot.id]?.stock ?? 'Belum',
+                                    expiration: v,
+                                  },
+                                }))
+                              }
+                              disabled={validateSaving}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 border-t border-border pt-4 md:grid-cols-2">
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">Validasi stok</p>
+                      <DecisionButtonGroup
+                        value={validateItemDecisions[row.id]?.stock ?? 'Belum'}
+                        onChange={(v) =>
+                          setValidateItemDecisions((prev) => ({
+                            ...prev,
+                            [row.id]: { ...prev[row.id], stock: v },
+                          }))
+                        }
+                        disabled={validateSaving}
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">Validasi kadaluarsa</p>
+                      <DecisionButtonGroup
+                        value={validateItemDecisions[row.id]?.expiration ?? 'Belum'}
+                        onChange={(v) =>
+                          setValidateItemDecisions((prev) => ({
+                            ...prev,
+                            [row.id]: { ...prev[row.id], expiration: v },
+                          }))
+                        }
+                        disabled={validateSaving}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+            <div className="flex justify-end gap-2 pt-2 border-t border-border">
+              <Button variant="outline" onClick={() => setValidateOpen(false)} disabled={validateSaving}>
+                Tutup
+              </Button>
+              <Button onClick={submitValidate} disabled={validateSaving}>
+                {validateSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden /> : null}
+                Simpan validasi
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Tidak ada data.</p>
+        )}
+      </Dialog>
+
       <header
         ref={headerRef}
         className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
@@ -512,10 +1022,27 @@ export default function StockOpname() {
             Kelola dan validasi hasil stock opname barang
           </p>
         </div>
-        <Button onClick={openCreate} aria-label="Tambah stock opname baru">
-          <Plus className="w-4 h-4 mr-2" aria-hidden />
-          Tambah Stock Opname
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void exportStockOpnameExcel()}
+            disabled={exporting}
+            aria-label="Ekspor data stock opname ke Excel"
+            className="gap-2"
+          >
+            {exporting ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4 shrink-0" aria-hidden />
+            )}
+            Ekspor Excel
+          </Button>
+          <Button onClick={openCreate} aria-label="Tambah stock opname baru">
+            <Plus className="w-4 h-4 mr-2" aria-hidden />
+            Tambah Stock Opname
+          </Button>
+        </div>
       </header>
 
       <section
@@ -524,7 +1051,7 @@ export default function StockOpname() {
       >
         <div className="p-5">
           <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
-            <div className="md:col-span-4">
+            <div className="md:col-span-3">
               <label className="mb-2 block text-sm font-medium text-foreground">Filter barang</label>
               <select
                 value={filters.item_id}
@@ -586,8 +1113,20 @@ export default function StockOpname() {
                 aria-label="Filter tanggal akhir"
               />
             </div>
-            <div className="md:col-span-1 flex md:justify-end">
-              <Button variant="outline" onClick={resetFilters} aria-label="Reset filter">
+            <div className="md:col-span-2 flex flex-col gap-2 md:justify-end">
+              <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={filters.pending_validation}
+                  onChange={(e) => {
+                    setFilters((p) => ({ ...p, pending_validation: e.target.checked }));
+                    setPagination((p) => ({ ...p, page: 1 }));
+                  }}
+                  className="h-4 w-4 rounded border-input"
+                />
+                Belum divalidasi
+              </label>
+              <Button variant="outline" onClick={resetFilters} aria-label="Reset filter" className="w-full md:w-auto">
                 Reset
               </Button>
             </div>
@@ -628,7 +1167,22 @@ export default function StockOpname() {
                   <div className="border-b border-border bg-muted/30 px-5 py-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-foreground">{it.item_name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-semibold text-foreground">{it.item_name}</p>
+                          {it.validation_status ? (
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                                it.validation_status === 'Selesai'
+                                  ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'
+                                  : it.validation_status === 'Belum'
+                                    ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'
+                                    : 'bg-muted text-muted-foreground'
+                              }`}
+                            >
+                              {it.validation_status}
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="mt-1 flex flex-wrap gap-4 text-xs text-muted-foreground">
                           <span className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" aria-hidden />
@@ -668,8 +1222,24 @@ export default function StockOpname() {
                               </span>
                             ) : null}
                           </span>
+                          <span className="flex w-full flex-wrap items-center gap-3 border-t border-border/60 pt-2 mt-2">
+                            <ValidatedFieldLabel
+                              label="Validasi suhu"
+                              validated={isValidated(it.temperature_validation_status)}
+                            />
+                          </span>
                         </div>
                       </div>
+                      {user?.role === 'Admin' && it.validation_status === 'Belum' && it.stock_opname_id ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openValidate(Number(it.stock_opname_id))}
+                        >
+                          Validasi
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
 
@@ -714,6 +1284,16 @@ export default function StockOpname() {
                                     >
                                       Jumlah stock: {stockMatch ? 'Sesuai' : 'Tidak sesuai'}
                                     </span>
+                                    <span className="flex w-full flex-wrap gap-3 border-t border-border/50 pt-2 mt-1">
+                                      <ValidatedFieldLabel
+                                        label="Validasi stok (admin)"
+                                        validated={isValidated(l.stock_validation_status)}
+                                      />
+                                      <ValidatedFieldLabel
+                                        label="Validasi kadaluarsa (admin)"
+                                        validated={isValidated(l.expiration_validation_status)}
+                                      />
+                                    </span>
                                   </div>
                                 </div>
                               </div>
@@ -729,7 +1309,9 @@ export default function StockOpname() {
                                   </p>
                                   <p className="mt-1 text-sm text-foreground">
                                     <span className="text-muted-foreground">Kadaluarsa:</span>{' '}
-                                    <span className="font-medium">{formatDateId(l.recorded_expiration)}</span>
+                                    <span className="font-medium">
+                                      {formatDdMmYyyyFromDateOnly(l.recorded_expiration)}
+                                    </span>
                                   </p>
                                 </div>
                                 <div className="rounded-md border border-border bg-card p-3">
@@ -742,7 +1324,9 @@ export default function StockOpname() {
                                   </p>
                                   <p className="mt-1 text-sm text-foreground">
                                     <span className="text-muted-foreground">Kadaluarsa:</span>{' '}
-                                    <span className="font-medium">{formatDateId(l.opname_expiration)}</span>
+                                    <span className="font-medium">
+                                      {formatDdMmYyyyFromDateOnly(l.opname_expiration)}
+                                    </span>
                                   </p>
                                 </div>
                               </div>

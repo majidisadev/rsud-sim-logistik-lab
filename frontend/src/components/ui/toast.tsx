@@ -92,7 +92,7 @@ function ToastViewport({
 
   return createPortal(
     <div
-      className="fixed right-4 top-4 z-[100] flex w-[min(420px,calc(100vw-2rem))] flex-col gap-2"
+      className="fixed bottom-4 right-4 z-[100] flex w-[min(420px,calc(100vw-2rem))] flex-col-reverse gap-2"
       aria-live="polite"
       aria-relevant="additions text"
     >

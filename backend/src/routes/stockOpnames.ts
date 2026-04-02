@@ -2,6 +2,8 @@ import express from 'express';
 import pool from '../config/database';
 import { AuthRequest } from '../middleware/auth';
 import { requireRole } from '../middleware/auth';
+import { findPendingLotIdsBlockingNewOpname } from '../services/opnameFreeze';
+import { applyOpnameValidationDecisions } from '../services/opnameApplyDecisions';
 
 const router = express.Router();
 
@@ -11,26 +13,34 @@ function isTemperatureMatch(value: any): value is TemperatureMatch {
   return value === 'Sesuai' || value === 'Tidak sesuai';
 }
 
+/** Normalisasi input ke YYYY-MM-DD untuk kolom DATE — jangan pakai toISOString() (geser tanggal vs zona waktu). */
+function localYmdFromDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function toNullableDateString(value: any): string | null {
   if (value === null || value === undefined || value === '') return null;
   if (value instanceof Date) {
     if (!Number.isFinite(value.getTime())) return null;
-    return value.toISOString().slice(0, 10);
+    return localYmdFromDate(value);
   }
   if (typeof value === 'string') {
     const v = value.trim();
     if (v === '') return null;
-    // Accept ISO / yyyy-mm-dd; normalize to yyyy-mm-dd
-    if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.slice(0, 10);
-    // Handle strings like "Wed Apr 01 2026 ... GMT+0700 ..."
+    const dateOnly = v.match(/^(\d{4}-\d{2}-\d{2})(?:\s|$)/);
+    if (dateOnly) return dateOnly[1];
     const d = new Date(v);
-    if (Number.isFinite(d.getTime())) return d.toISOString().slice(0, 10);
+    if (Number.isFinite(d.getTime())) return localYmdFromDate(d);
     return v;
   }
   const s = String(value);
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const dateOnly = s.match(/^(\d{4}-\d{2}-\d{2})(?:\s|$)/);
+  if (dateOnly) return dateOnly[1];
   const d = new Date(s);
-  if (Number.isFinite(d.getTime())) return d.toISOString().slice(0, 10);
+  if (Number.isFinite(d.getTime())) return localYmdFromDate(d);
   return s;
 }
 
@@ -86,8 +96,18 @@ async function buildOpnameWithItemsAndLots(opnameId: string | number) {
   const lotsByItemId = new Map<number, any[]>();
   if (itemIds.length > 0) {
     const lotsResult = await pool.query(
-      `SELECT 
-          soil.*,
+      `SELECT
+          soil.id,
+          soil.stock_opname_item_id,
+          soil.lot_id,
+          soil.recorded_lot_stock,
+          soil.opname_lot_stock,
+          soil.recorded_expiration::text as recorded_expiration,
+          soil.opname_expiration::text as opname_expiration,
+          soil.created_at,
+          soil.stock_validation_status,
+          soil.expiration_validation_status,
+          soil.stock_adjustment_posted,
           l.lot_number,
           l.item_id as lot_item_id
        FROM stock_opname_item_lots soil
@@ -128,6 +148,11 @@ router.get('/items', async (req, res) => {
     const officerIdRaw = req.query.officer_id;
     const dateStartRaw = req.query.date_start;
     const dateEndRaw = req.query.date_end;
+    const pendingValidationRaw = req.query.pending_validation;
+    const pvs = Array.isArray(pendingValidationRaw)
+      ? String(pendingValidationRaw[0])
+      : String(pendingValidationRaw ?? '');
+    const pendingOnly = pvs === 'true' || pvs === '1';
 
     const whereParts: string[] = [];
     const whereParams: any[] = [];
@@ -154,6 +179,25 @@ router.get('/items', async (req, res) => {
       whereParams.push(dateEnd);
     }
 
+    if (pendingOnly) {
+      whereParts.push(`so.validation_status = 'Belum'`);
+      whereParts.push(`(
+        soi.temperature_validation_status = 'Belum'
+        OR EXISTS (
+          SELECT 1 FROM stock_opname_item_lots soil
+          WHERE soil.stock_opname_item_id = soi.id
+            AND (soil.stock_validation_status = 'Belum' OR soil.expiration_validation_status = 'Belum')
+        )
+        OR (
+          NOT EXISTS (SELECT 1 FROM stock_opname_item_lots soil2 WHERE soil2.stock_opname_item_id = soi.id)
+          AND (
+            soi.stock_validation_status = 'Belum'
+            OR soi.expiration_validation_status = 'Belum'
+          )
+        )
+      )`);
+    }
+
     const whereSql = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
 
     const totalResult = await pool.query(
@@ -170,6 +214,7 @@ router.get('/items', async (req, res) => {
     const itemsResult = await pool.query(
       `SELECT
           soi.*,
+          so.id as stock_opname_id,
           so.opname_date,
           so.validation_status,
           so.officer_id,
@@ -195,7 +240,17 @@ router.get('/items', async (req, res) => {
     if (opnameItemIds.length > 0) {
       const lotsResult = await pool.query(
         `SELECT
-            soil.*,
+            soil.id,
+            soil.stock_opname_item_id,
+            soil.lot_id,
+            soil.recorded_lot_stock,
+            soil.opname_lot_stock,
+            soil.recorded_expiration::text as recorded_expiration,
+            soil.opname_expiration::text as opname_expiration,
+            soil.created_at,
+            soil.stock_validation_status,
+            soil.expiration_validation_status,
+            soil.stock_adjustment_posted,
             l.lot_number
          FROM stock_opname_item_lots soil
          INNER JOIN lots l ON l.id = soil.lot_id
@@ -310,8 +365,18 @@ router.get('/', async (req, res) => {
     const lotsByOpnameItemId = new Map<number, any[]>();
     if (opnameItemIds.length > 0) {
       const lotsResult = await pool.query(
-        `SELECT 
-            soil.*,
+        `SELECT
+            soil.id,
+            soil.stock_opname_item_id,
+            soil.lot_id,
+            soil.recorded_lot_stock,
+            soil.opname_lot_stock,
+            soil.recorded_expiration::text as recorded_expiration,
+            soil.opname_expiration::text as opname_expiration,
+            soil.created_at,
+            soil.stock_validation_status,
+            soil.expiration_validation_status,
+            soil.stock_adjustment_posted,
             l.lot_number
          FROM stock_opname_item_lots soil
          INNER JOIN lots l ON l.id = soil.lot_id
@@ -352,9 +417,22 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Get stock opname by ID (disabled - list-only UI)
+// Get stock opname by ID (detail + validation UI)
 router.get('/:id', async (req, res) => {
-  return res.status(404).json({ error: 'Endpoint disabled' });
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+    const data = await buildOpnameWithItemsAndLots(id);
+    if (!data) {
+      return res.status(404).json({ error: 'Stock opname not found' });
+    }
+    res.json(data);
+  } catch (error) {
+    console.error('Get stock opname by id error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Create stock opname
@@ -392,6 +470,25 @@ router.post('/', async (req: AuthRequest, res) => {
         // Backward compatibility: old payload without lots
         if (!lots) {
           const { recorded_stock, opname_stock, expiration_match, recorded_expiration } = item;
+          const legacyItemId = item?.item_id;
+          if (legacyItemId) {
+            const legacyPendingLegacy = await client.query(
+              `SELECT 1 FROM stock_opname_items soi
+               INNER JOIN stock_opnames so ON so.id = soi.stock_opname_id
+               WHERE soi.item_id = $1 AND so.validation_status = 'Belum'
+               AND NOT EXISTS (SELECT 1 FROM stock_opname_item_lots x WHERE x.stock_opname_item_id = soi.id)
+               AND (
+                 soi.temperature_validation_status = 'Belum'
+                 OR soi.stock_validation_status = 'Belum'
+                 OR soi.expiration_validation_status = 'Belum'
+               )
+               LIMIT 1`,
+              [legacyItemId]
+            );
+            if (legacyPendingLegacy.rows.length > 0) {
+              throw new Error('ITEM_HAS_PENDING_LEGACY_OPNAME');
+            }
+          }
 
           // Get recorded expiration from lots if not provided
           let finalRecordedExpiration = recorded_expiration;
@@ -407,8 +504,9 @@ router.post('/', async (req: AuthRequest, res) => {
 
           await client.query(
             `INSERT INTO stock_opname_items 
-             (stock_opname_id, item_id, recorded_stock, opname_stock, expiration_match, recorded_expiration, recorded_temperature, temperature_match)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+             (stock_opname_id, item_id, recorded_stock, opname_stock, expiration_match, recorded_expiration, recorded_temperature, temperature_match,
+              temperature_validation_status, stock_validation_status, expiration_validation_status)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'Belum', 'Belum', 'Belum')`,
             [
               opnameId,
               itemId,
@@ -427,6 +525,23 @@ router.post('/', async (req: AuthRequest, res) => {
           throw new Error('Item ID is required');
         }
 
+        const legacyPending = await client.query(
+          `SELECT 1 FROM stock_opname_items soi
+           INNER JOIN stock_opnames so ON so.id = soi.stock_opname_id
+           WHERE soi.item_id = $1 AND so.validation_status = 'Belum'
+           AND NOT EXISTS (SELECT 1 FROM stock_opname_item_lots x WHERE x.stock_opname_item_id = soi.id)
+           AND (
+             soi.temperature_validation_status = 'Belum'
+             OR soi.stock_validation_status = 'Belum'
+             OR soi.expiration_validation_status = 'Belum'
+           )
+           LIMIT 1`,
+          [itemId]
+        );
+        if (legacyPending.rows.length > 0) {
+          throw new Error('ITEM_HAS_PENDING_LEGACY_OPNAME');
+        }
+
         const itemDetail = await client.query('SELECT temperature FROM items WHERE id = $1', [itemId]);
         if (itemDetail.rows.length === 0) {
           throw new Error('Item not found');
@@ -442,6 +557,11 @@ router.post('/', async (req: AuthRequest, res) => {
         const lotIds = lots.map((l: any) => l?.lot_id).filter((x: any) => !!x);
         if (lotIds.length === 0) {
           throw new Error('At least one lot is required');
+        }
+
+        const blockedLots = await findPendingLotIdsBlockingNewOpname(client, lotIds as number[]);
+        if (blockedLots.length > 0) {
+          throw new Error(`LOTS_PENDING_OPNAME:${blockedLots.join(',')}`);
         }
 
         const lotRowsResult = await client.query(
@@ -498,8 +618,9 @@ router.post('/', async (req: AuthRequest, res) => {
 
         const parentInsert = await client.query(
           `INSERT INTO stock_opname_items 
-           (stock_opname_id, item_id, recorded_stock, opname_stock, expiration_match, recorded_expiration, recorded_temperature, opname_temperature, temperature_match)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+           (stock_opname_id, item_id, recorded_stock, opname_stock, expiration_match, recorded_expiration, recorded_temperature, opname_temperature, temperature_match,
+            temperature_validation_status, stock_validation_status, expiration_validation_status)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Belum', NULL, NULL)
            RETURNING id`,
           [
             opnameId,
@@ -518,8 +639,9 @@ router.post('/', async (req: AuthRequest, res) => {
         for (const li of lotInserts) {
           await client.query(
             `INSERT INTO stock_opname_item_lots
-             (stock_opname_item_id, lot_id, recorded_lot_stock, opname_lot_stock, recorded_expiration, opname_expiration)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+             (stock_opname_item_id, lot_id, recorded_lot_stock, opname_lot_stock, recorded_expiration, opname_expiration,
+              stock_validation_status, expiration_validation_status)
+             VALUES ($1, $2, $3, $4, $5, $6, 'Belum', 'Belum')`,
             [
               opnameItemId,
               li.lot_id,
@@ -554,6 +676,16 @@ router.post('/', async (req: AuthRequest, res) => {
     }
   } catch (error: any) {
     console.error('Create stock opname error:', error);
+    if (error?.message === 'ITEM_HAS_PENDING_LEGACY_OPNAME') {
+      return res.status(400).json({
+        error: 'Barang ini masih memiliki stock opname lama yang belum selesai divalidasi',
+      });
+    }
+    if (typeof error?.message === 'string' && error.message.startsWith('LOTS_PENDING_OPNAME:')) {
+      return res.status(400).json({
+        error: 'Salah satu lot masih dalam stock opname yang belum selesai divalidasi',
+      });
+    }
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -585,7 +717,36 @@ router.patch('/:id/items/:itemId/lots/:itemLotId', async (req: AuthRequest, res)
 
 // Validate stock opname (Admin only)
 router.patch('/:id/validate', requireRole('Admin'), async (req: AuthRequest, res) => {
-  return res.status(404).json({ error: 'Validation disabled' });
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ error: 'Invalid id' });
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await applyOpnameValidationDecisions(client, id, req.body ?? {}, req.user!.id);
+      await client.query('COMMIT');
+      const data = await buildOpnameWithItemsAndLots(id);
+      res.json(data);
+    } catch (e: any) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  } catch (error: any) {
+    console.error('Validate stock opname error:', error);
+    const code = error?.statusCode;
+    if (code === 404) {
+      return res.status(404).json({ error: error.message || 'Not found' });
+    }
+    if (code === 400) {
+      return res.status(400).json({ error: error.message || 'Bad request' });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 export default router;

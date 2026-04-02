@@ -5,7 +5,7 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "nodemon",
-    "build": "tsc && node -e \"require('fs').mkdirSync('dist/migrations', {recursive: true}); require('fs').copyFileSync('src/migrations/createTables.sql', 'dist/migrations/createTables.sql')\"",
+    "build": "tsc && node -e \"const fs=require('fs');fs.mkdirSync('dist/migrations',{recursive:true});['createTables.sql','opnameValidation.sql'].forEach(f=>fs.copyFileSync('src/migrations/'+f,'dist/migrations/'+f))\"",
     "start": "node dist/server.js",
     "migrate": "node dist/migrations/runMigrations.js"
   },

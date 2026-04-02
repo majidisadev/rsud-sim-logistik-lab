@@ -1,5 +1,6 @@
 import express from "express";
 import pool from "../config/database";
+import { assertItemNotFrozen, getLotsPendingOpnameFlags } from "../services/opnameFreeze";
 import { requireRole } from "../middleware/auth";
 import { isNullableHttpUrl } from "../utils/imageUrl";
 
@@ -673,7 +674,12 @@ router.get("/:id/lots", async (req, res) => {
        ORDER BY created_at DESC`,
       [id]
     );
-    res.json(result.rows);
+    const pendingMap = await getLotsPendingOpnameFlags(pool, Number(id));
+    const rows = result.rows.map((row: any) => ({
+      ...row,
+      in_pending_opname: pendingMap.get(row.id) ?? false,
+    }));
+    res.json(rows);
   } catch (error) {
     console.error("Get lots error:", error);
     res.status(500).json({ error: "Internal server error" });
@@ -703,6 +709,21 @@ router.post(
         return res
           .status(400)
           .json({ error: "Lot number already exists for this item" });
+      }
+
+      const stockNum = Number(stock || 0);
+      if (stockNum > 0) {
+        try {
+          await assertItemNotFrozen(pool, Number(id));
+        } catch (e: any) {
+          if (e?.message === "STOCK_FROZEN_OPNAME") {
+            return res.status(400).json({
+              error:
+                "Tidak dapat menambah lot dengan stok: barang memiliki stock opname yang belum selesai divalidasi",
+            });
+          }
+          throw e;
+        }
       }
 
       const result = await pool.query(

@@ -2,6 +2,7 @@ import express from "express";
 import pool from "../config/database";
 import { AuthRequest } from "../middleware/auth";
 import { requireRole } from "../middleware/auth";
+import { assertItemNotFrozen } from "../services/opnameFreeze";
 
 const router = express.Router();
 
@@ -124,6 +125,19 @@ router.post("/", async (req: AuthRequest, res) => {
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+
+      try {
+        await assertItemNotFrozen(client, Number(item_id));
+      } catch (e: any) {
+        await client.query("ROLLBACK");
+        if (e?.message === "STOCK_FROZEN_OPNAME") {
+          return res.status(400).json({
+            error:
+              "Tidak dapat mencatat transaksi: barang memiliki stock opname yang belum selesai divalidasi",
+          });
+        }
+        throw e;
+      }
 
       let finalLotId = lot_id;
 
@@ -259,6 +273,19 @@ router.put("/:id", async (req: AuthRequest, res) => {
           .json({ error: "You can only edit your own transactions" });
       }
 
+      try {
+        await assertItemNotFrozen(client, Number(currentTransaction.item_id));
+      } catch (e: any) {
+        await client.query("ROLLBACK");
+        if (e?.message === "STOCK_FROZEN_OPNAME") {
+          return res.status(400).json({
+            error:
+              "Tidak dapat mengubah transaksi: barang memiliki stock opname yang belum selesai divalidasi",
+          });
+        }
+        throw e;
+      }
+
       // Get current lot stock
       const lotResult = await client.query(
         "SELECT stock FROM lots WHERE id = $1",
@@ -366,6 +393,19 @@ router.delete("/:id", requireRole("Admin", "PJ Gudang"), async (req, res) => {
       }
 
       const transaction = transactionResult.rows[0];
+
+      try {
+        await assertItemNotFrozen(client, Number(transaction.item_id));
+      } catch (e: any) {
+        await client.query("ROLLBACK");
+        if (e?.message === "STOCK_FROZEN_OPNAME") {
+          return res.status(400).json({
+            error:
+              "Tidak dapat menghapus transaksi: barang memiliki stock opname yang belum selesai divalidasi",
+          });
+        }
+        throw e;
+      }
 
       // Get current lot stock
       const lotResult = await client.query(
