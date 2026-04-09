@@ -85,7 +85,6 @@ export default function Laporan() {
   const exportToExcel = async () => {
     setExporting(true);
     try {
-      const XLSX = await import('xlsx');
       const data = filteredReports.map((r) => ({
         Barang: r.item_name,
         Satuan: r.unit || '-',
@@ -93,10 +92,31 @@ export default function Laporan() {
         'Jumlah Keluar': r.total_keluar,
       }));
 
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Laporan');
-      XLSX.writeFile(wb, `laporan-${period}-${year}${period === 'monthly' ? `-${month}` : ''}.xlsx`);
+      const { Workbook } = await import('exceljs');
+      const wb = new Workbook();
+      const ws = wb.addWorksheet('Laporan');
+
+      ws.columns = [
+        { header: 'Barang', key: 'Barang', width: 28 },
+        { header: 'Satuan', key: 'Satuan', width: 12 },
+        { header: 'Jumlah Masuk', key: 'Jumlah Masuk', width: 14 },
+        { header: 'Jumlah Keluar', key: 'Jumlah Keluar', width: 14 },
+      ];
+      data.forEach((row: any) => ws.addRow(row));
+
+      const filename = `laporan-${period}-${year}${period === 'monthly' ? `-${month}` : ''}.xlsx`;
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     } finally {
       setExporting(false);
     }

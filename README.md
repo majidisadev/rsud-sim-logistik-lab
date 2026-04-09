@@ -13,15 +13,6 @@ Sistem informasi manajemen logistik laboratorium rumah sakit berbasis web menggu
 - **Frontend**: React, Vite, Tailwind CSS, Shadcn UI
 - **Authentication**: JWT
 
-## Express Install
-
-1. Buka install-all.bat
-2. Ganti `.env.example` menjadi `.env` pada folder backend dan frontend. Atur dengan menyesuaikan database.
-3. Siapkan database PostgreSQL. Buat database baru dengan nama sesuai dengan `DB_NAME` di `backend/.env` (default: `sim_logistik_lab`)
-4. Buka setup-database.bat
-5. Buka build.bat
-6. Buka start.bat (jangan ditutup)
-
 ## Instalasi
 
 1. Install dependencies dari root:
@@ -33,7 +24,6 @@ npm run install:all
 2. Siapkan environment variables:
 
    **Backend:**
-
    - Copy `backend/.env.example` ke `backend/.env`
    - Update konfigurasi di `backend/.env` sesuai dengan setup Anda:
      - Database PostgreSQL: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`
@@ -41,12 +31,10 @@ npm run install:all
      - JWT: `JWT_SECRET` (wajib diubah untuk production), `JWT_EXPIRES_IN`
 
    **Frontend:**
-
    - Copy `frontend/.env.example` ke `frontend/.env`
    - Update `VITE_API_URL` jika backend berjalan di port/alamat yang berbeda (default: `http://localhost:5000/api`)
 
 3. Siapkan database PostgreSQL:
-
    - Buat database baru dengan nama sesuai dengan `DB_NAME` di `backend/.env` (default: `sim_logistik_lab`)
 
 4. Build backend lalu jalankan migrasi database:
@@ -87,7 +75,7 @@ Jalankan production:
 npm start
 ```
 
-Atau double-click **start.bat** di root project untuk menjalankan server (sama seperti `npm start`).
+Catatan: `npm start` akan menjalankan backend (`node dist/server.js`) dan frontend mode preview (`vite preview --host`) secara bersamaan.
 
 ## Default Login
 

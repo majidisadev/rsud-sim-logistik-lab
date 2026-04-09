@@ -211,7 +211,6 @@ export default function AllItems() {
   const exportToExcel = async () => {
     setExporting(true);
     try {
-      const XLSX = await import('xlsx');
       const data = sortedItems.map((item: any) => ({
         Barang: item.name,
         Kategori: item.category_name || '-',
@@ -221,10 +220,32 @@ export default function AllItems() {
         Supplier: item.supplier_names || '-',
       }));
 
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Barang');
-      XLSX.writeFile(wb, 'barang.xlsx');
+      const { Workbook } = await import('exceljs');
+      const wb = new Workbook();
+      const ws = wb.addWorksheet('Barang');
+
+      ws.columns = [
+        { header: 'Barang', key: 'Barang', width: 28 },
+        { header: 'Kategori', key: 'Kategori', width: 18 },
+        { header: 'Stock', key: 'Stock', width: 12 },
+        { header: 'Satuan', key: 'Satuan', width: 12 },
+        { header: 'Expiration', key: 'Expiration', width: 22 },
+        { header: 'Supplier', key: 'Supplier', width: 26 },
+      ];
+      data.forEach((row: any) => ws.addRow(row));
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'barang.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error exporting to Excel:', error);
       toast({ variant: 'error', title: 'Gagal mengekspor ke Excel' });

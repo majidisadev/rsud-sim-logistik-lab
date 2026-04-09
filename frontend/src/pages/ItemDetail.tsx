@@ -305,7 +305,7 @@ export default function ItemDetail() {
     if (!item) return;
     setIsPrintingStockCard(true);
     try {
-      const [{ default: jsPDF }, _autoTable] = await Promise.all([
+      const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
         import("jspdf"),
         import("jspdf-autotable"),
       ]);
@@ -429,7 +429,7 @@ export default function ItemDetail() {
         ];
       });
 
-      (doc as any).autoTable({
+      autoTable(doc, {
         startY: 72,
         head: [["Tgl", "keterangan", "Masuk", "Keluar", "Sisa", "User"]],
         body,
@@ -490,7 +490,6 @@ export default function ItemDetail() {
     if (!item) return;
     setIsExportingExcel(true);
     try {
-      const XLSX = await import("xlsx");
       const empty6 = (): (string | number)[] => ["", "", "", "", "", ""];
 
       const headerRows: (string | number)[][] = [
@@ -530,9 +529,13 @@ export default function ItemDetail() {
         ];
       });
 
-      const ws = XLSX.utils.aoa_to_sheet([...headerRows, ...dataRows]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Riwayat");
+      const { Workbook } = await import("exceljs");
+      const wb = new Workbook();
+      const ws = wb.addWorksheet("Riwayat");
+
+      [...headerRows, ...dataRows].forEach((row) => {
+        ws.addRow(row as any[]);
+      });
 
       const datePart =
         transactionFilter.start_date || transactionFilter.end_date
@@ -541,10 +544,20 @@ export default function ItemDetail() {
       const typePart = transactionFilter.type
         ? `_${transactionFilter.type.toLowerCase()}`
         : "";
-      XLSX.writeFile(
-        wb,
-        `riwayat-transaksi_${safeFilePart(item.name || "barang")}_${safeFilePart(datePart)}${typePart}.xlsx`,
-      );
+      const filename = `riwayat-transaksi_${safeFilePart(item.name || "barang")}_${safeFilePart(datePart)}${typePart}.xlsx`;
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     } catch (e) {
       console.error("Error exporting Excel:", e);
       toast({ variant: "error", title: "Gagal mengekspor ke Excel" });

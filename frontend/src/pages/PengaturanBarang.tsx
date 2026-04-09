@@ -92,11 +92,23 @@ export default function PengaturanBarang() {
     // - nama barang
     // - stock
     void (async () => {
-      const XLSX = await import("xlsx");
-      const ws = XLSX.utils.aoa_to_sheet([["nama barang", "stock"]]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Template");
-      XLSX.writeFile(wb, "template-import-barang.xlsx");
+      const { Workbook } = await import("exceljs");
+      const wb = new Workbook();
+      const ws = wb.addWorksheet("Template");
+      ws.addRow(["nama barang", "stock"]);
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "template-import-barang.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     })();
   };
 
@@ -124,10 +136,12 @@ export default function PengaturanBarang() {
       setImporting(true);
 
       const buffer = await importFile.arrayBuffer();
-      const XLSX = await import("xlsx");
-      const workbook = XLSX.read(buffer, { type: "array" });
+      const { Workbook } = await import("exceljs");
+      const workbook = new Workbook();
+      await workbook.xlsx.load(buffer);
+      const worksheet = workbook.worksheets[0];
 
-      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+      if (!worksheet) {
         toast({
           variant: "error",
           title: "File tidak valid",
@@ -136,12 +150,26 @@ export default function PengaturanBarang() {
         return;
       }
 
-      const firstSheet = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheet];
-      const rows = XLSX.utils.sheet_to_json(worksheet, {
-        header: 1,
-        defval: "",
-      }) as any[][];
+      const cellToValue = (cell: any) => {
+        if (cell == null) return "";
+        if (typeof cell === "string" || typeof cell === "number") return cell;
+        if (cell instanceof Date) return cell.toISOString();
+        if (typeof cell === "object") {
+          if (typeof (cell as any).text === "string") return (cell as any).text;
+          if (typeof (cell as any).result === "string") return (cell as any).result;
+          if (typeof (cell as any).formula === "string" && (cell as any).result != null)
+            return (cell as any).result;
+          if (Array.isArray((cell as any).richText))
+            return (cell as any).richText.map((t: any) => t?.text || "").join("");
+        }
+        return String(cell);
+      };
+
+      const rows: any[][] = [];
+      worksheet.eachRow({ includeEmpty: true }, (row) => {
+        const values = Array.isArray(row.values) ? row.values.slice(1) : [];
+        rows.push(values.map(cellToValue));
+      });
 
       if (!rows || rows.length < 2) {
         toast({

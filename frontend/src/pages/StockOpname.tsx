@@ -338,15 +338,15 @@ export default function StockOpname() {
       const all: any[] = [];
       let page = 1;
       const limit = 100;
-      while (true) {
+      let totalPages = 1;
+      do {
         const res = await api.get('/stock-opnames/items', { params: { ...base, page, limit } });
         const chunk = res.data?.data;
         const pag = res.data?.pagination;
         if (Array.isArray(chunk)) all.push(...chunk);
-        const totalPages = Number(pag?.total_pages ?? 1) || 1;
-        if (page >= totalPages) break;
+        totalPages = Number(pag?.total_pages ?? 1) || 1;
         page += 1;
-      }
+      } while (page <= totalPages);
 
       if (all.length === 0) {
         toast({ variant: 'error', title: 'Tidak ada data untuk diekspor' });
@@ -413,12 +413,27 @@ export default function StockOpname() {
         }
       }
 
-      const XLSX = await import('xlsx');
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Stock Opname');
       const datePart = new Date().toISOString().slice(0, 10);
-      XLSX.writeFile(wb, `stock-opname_${datePart}.xlsx`);
+      const filename = `stock-opname_${datePart}.xlsx`;
+
+      const { Workbook } = await import('exceljs');
+      const wb = new Workbook();
+      const ws = wb.addWorksheet('Stock Opname');
+      ws.addRow(headers);
+      dataRows.forEach((r) => ws.addRow(r as any[]));
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
       toast({ variant: 'success', title: 'Ekspor Excel berhasil' });
     } catch (error) {
       console.error('Export stock opname:', error);
@@ -1164,7 +1179,7 @@ export default function StockOpname() {
                   className="rounded-xl border border-border bg-card shadow-sm overflow-hidden"
                   aria-label={`Item opname ${it.id}`}
                 >
-                  <div className="border-b border-border bg-muted/30 px-5 py-4">
+                  <div className="border-b border-border bg-muted/30 px-4 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -1183,7 +1198,7 @@ export default function StockOpname() {
                             </span>
                           ) : null}
                         </div>
-                        <div className="mt-1 flex flex-wrap gap-4 text-xs text-muted-foreground">
+                        <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
                           <span className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" aria-hidden />
                             <strong className="text-foreground">Tanggal:</strong>{' '}
@@ -1222,7 +1237,7 @@ export default function StockOpname() {
                               </span>
                             ) : null}
                           </span>
-                          <span className="flex w-full flex-wrap items-center gap-3 border-t border-border/60 pt-2 mt-2">
+                          <span className="flex flex-wrap items-center gap-3 border-t border-border/60 pt-1 mt-1">
                             <ValidatedFieldLabel
                               label="Validasi suhu"
                               validated={isValidated(it.temperature_validation_status)}
@@ -1243,14 +1258,14 @@ export default function StockOpname() {
                     </div>
                   </div>
 
-                  <div className="p-5">
+                  <div className="p-4">
                     {!Array.isArray(it.lots) || it.lots.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-10 text-muted-foreground" role="status">
                         <Package className="h-10 w-10 mb-2 opacity-50" aria-hidden />
                         <p className="font-medium">Belum ada lot</p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                         {it.lots.map((l: LotRow) => {
                           const expMatch = normalizeDate(l.recorded_expiration) === normalizeDate(l.opname_expiration);
                           const stockMatch =
@@ -1259,15 +1274,15 @@ export default function StockOpname() {
                           return (
                             <div
                               key={l.id}
-                              className="rounded-lg border border-border bg-background p-4"
+                              className="rounded-lg border border-border bg-background p-3"
                               aria-label={`Lot ${l.lot_number}`}
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div>
                                   <p className="text-sm font-semibold text-foreground">{l.lot_number}</p>
-                                  <div className="mt-1 flex flex-wrap gap-2">
+                                  <div className="mt-1 flex flex-wrap gap-1.5">
                                     <span
-                                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium leading-none ${
                                         expMatch
                                           ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
                                           : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
@@ -1276,7 +1291,7 @@ export default function StockOpname() {
                                       Kadaluarsa: {expMatch ? 'Sesuai' : 'Tidak sesuai'}
                                     </span>
                                     <span
-                                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium leading-none ${
                                         stockMatch
                                           ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
                                           : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
@@ -1284,7 +1299,7 @@ export default function StockOpname() {
                                     >
                                       Jumlah stock: {stockMatch ? 'Sesuai' : 'Tidak sesuai'}
                                     </span>
-                                    <span className="flex w-full flex-wrap gap-3 border-t border-border/50 pt-2 mt-1">
+                                    <span className="flex flex-wrap gap-3 border-t border-border/50 pt-1 mt-1">
                                       <ValidatedFieldLabel
                                         label="Validasi stok (admin)"
                                         validated={isValidated(l.stock_validation_status)}
@@ -1298,31 +1313,31 @@ export default function StockOpname() {
                                 </div>
                               </div>
 
-                              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                <div className="rounded-md border border-border bg-card p-3">
-                                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                                <div className="rounded-md border border-border bg-card p-2">
+                                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                                     Tercatat
                                   </p>
-                                  <p className="mt-2 text-sm text-foreground">
+                                  <p className="mt-1 text-[13px] leading-snug text-foreground">
                                     <span className="text-muted-foreground">Stock:</span>{' '}
                                     <span className="font-medium">{l.recorded_lot_stock}</span>
                                   </p>
-                                  <p className="mt-1 text-sm text-foreground">
+                                  <p className="mt-0.5 text-[13px] leading-snug text-foreground">
                                     <span className="text-muted-foreground">Kadaluarsa:</span>{' '}
                                     <span className="font-medium">
                                       {formatDdMmYyyyFromDateOnly(l.recorded_expiration)}
                                     </span>
                                   </p>
                                 </div>
-                                <div className="rounded-md border border-border bg-card p-3">
-                                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                                <div className="rounded-md border border-border bg-card p-2">
+                                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
                                     Opname
                                   </p>
-                                  <p className="mt-2 text-sm text-foreground">
+                                  <p className="mt-1 text-[13px] leading-snug text-foreground">
                                     <span className="text-muted-foreground">Stock:</span>{' '}
                                     <span className="font-medium">{l.opname_lot_stock}</span>
                                   </p>
-                                  <p className="mt-1 text-sm text-foreground">
+                                  <p className="mt-0.5 text-[13px] leading-snug text-foreground">
                                     <span className="text-muted-foreground">Kadaluarsa:</span>{' '}
                                     <span className="font-medium">
                                       {formatDdMmYyyyFromDateOnly(l.opname_expiration)}
