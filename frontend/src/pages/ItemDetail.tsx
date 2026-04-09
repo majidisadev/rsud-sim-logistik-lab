@@ -77,7 +77,7 @@ export default function ItemDetail() {
     description: "",
     category_id: "",
     unit: "",
-    temperature: "",
+    temperature: "not specified",
     min_stock: 1,
     image: "",
     suppliers: [] as string[],
@@ -659,7 +659,10 @@ export default function ItemDetail() {
         description: item.description || "",
         category_id: item.category_id?.toString() || "",
         unit: item.unit || "",
-        temperature: item.temperature || "",
+        temperature:
+          typeof item.temperature === "string" && item.temperature.trim() !== ""
+            ? item.temperature
+            : "not specified",
         min_stock: item.min_stock || 1,
         image: item.image || "",
         suppliers: item.suppliers?.map((s: any) => s.id.toString()) || [],
@@ -700,6 +703,11 @@ export default function ItemDetail() {
         }
       }
 
+      const normalizedTemperature =
+        typeof editForm.temperature === "string" &&
+        editForm.temperature.trim() !== ""
+          ? editForm.temperature.trim()
+          : "not specified";
       const updateData: any = {
         name: trimmedName,
         description: editForm.description,
@@ -707,7 +715,7 @@ export default function ItemDetail() {
           ? parseInt(editForm.category_id)
           : null,
         unit: editForm.unit,
-        temperature: editForm.temperature,
+        temperature: normalizedTemperature,
         min_stock: parseInt(editForm.min_stock.toString()),
         image: editForm.image || null,
         suppliers: editForm.suppliers.map((s) => parseInt(s)),
@@ -920,7 +928,10 @@ export default function ItemDetail() {
                 <div>
                   <dt className="text-sm text-muted-foreground">Suhu</dt>
                   <dd className="font-medium mt-0.5">
-                    {item.temperature || "-"}
+                    {typeof item.temperature === "string" &&
+                    item.temperature.trim() !== ""
+                      ? item.temperature
+                      : "not specified"}
                   </dd>
                 </div>
                 <div>

@@ -25,7 +25,7 @@ export default function PengaturanBarang() {
     description: "",
     category_id: "",
     unit: "",
-    temperature: "",
+    temperature: "not specified",
     min_stock: 1,
     stock_awal: 0,
     image: "",
@@ -330,10 +330,15 @@ export default function PengaturanBarang() {
     }
 
     try {
+      const normalizedTemperature =
+        typeof form.temperature === "string" && form.temperature.trim() !== ""
+          ? form.temperature.trim()
+          : "not specified";
       await api.post("/items", {
         ...form,
         name: form.name.trim(),
         image: form.image || undefined,
+        temperature: normalizedTemperature,
         category_id: form.category_id ? parseInt(form.category_id) : undefined,
         suppliers: form.suppliers
           .map((s) => parseInt(s))
@@ -345,7 +350,7 @@ export default function PengaturanBarang() {
         description: "",
         category_id: "",
         unit: "",
-        temperature: "",
+        temperature: "not specified",
         min_stock: 1,
         stock_awal: 0,
         image: "",
@@ -368,7 +373,7 @@ export default function PengaturanBarang() {
       description: "",
       category_id: "",
       unit: "",
-      temperature: "",
+      temperature: "not specified",
       min_stock: 1,
       stock_awal: 0,
       image: "",

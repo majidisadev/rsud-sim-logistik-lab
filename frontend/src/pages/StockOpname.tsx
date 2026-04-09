@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
-import anime from 'animejs';
-import api from '../lib/api';
+import { useEffect, useMemo, useState, useRef } from "react";
+import anime from "animejs";
+import api from "../lib/api";
 import {
   Plus,
   ClipboardList,
@@ -12,19 +12,23 @@ import {
   CheckCircle2,
   XCircle,
   FileSpreadsheet,
-} from 'lucide-react';
-import { usePrefersReducedMotion } from '../lib/hooks/usePrefersReducedMotion';
-import Dialog from '../components/ui/Dialog';
-import Button from '../components/ui/Button';
-import Input from '../components/ui/Input';
-import { useToast } from '../components/ui/toast';
-import { getErrorMessage } from '../lib/getErrorMessage';
-import { useAuth } from '../contexts/AuthContext';
+} from "lucide-react";
+import { usePrefersReducedMotion } from "../lib/hooks/usePrefersReducedMotion";
+import Dialog from "../components/ui/Dialog";
+import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
+import { useToast } from "../components/ui/toast";
+import { getErrorMessage } from "../lib/getErrorMessage";
+import { useAuth } from "../contexts/AuthContext";
 
-type ValidationChoice = 'Belum' | 'Disetujui' | 'Tidak disetujui';
+type ValidationChoice = "Belum" | "Disetujui" | "Tidak disetujui";
 
 type OfficerOption = { officer_id: number; officer_name: string };
-type ItemOption = { id: number; name: string; last_opname_date?: string | null };
+type ItemOption = {
+  id: number;
+  name: string;
+  last_opname_date?: string | null;
+};
 
 type PaginationState = {
   page: number;
@@ -62,14 +66,14 @@ function normalizeDate(value: string | null | undefined) {
 }
 
 function formatDateId(value: string | null | undefined) {
-  if (!value) return '-';
+  if (!value) return "-";
   const d = new Date(value);
   if (!Number.isFinite(d.getTime())) return String(value);
-  return d.toLocaleDateString('id-ID');
+  return d.toLocaleDateString("id-ID");
 }
 
 function formatDdMmYyyyFromDateOnly(value: string | null | undefined) {
-  if (!value) return '-';
+  if (!value) return "-";
   const v = String(value).slice(0, 10); // supports ISO or YYYY-MM-DD
   const m = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return formatDateId(value);
@@ -78,14 +82,14 @@ function formatDdMmYyyyFromDateOnly(value: string | null | undefined) {
 }
 
 function isValidated(status: string | null | undefined) {
-  return Boolean(status && status !== 'Belum');
+  return Boolean(status && status !== "Belum");
 }
 
 /** Simbol validasi admin: setuju = ✓, tolak = ✗, belum = kosong */
 function adminValidationSymbol(status: string | null | undefined): string {
-  if (status === 'Disetujui') return '\u2713';
-  if (status === 'Tidak disetujui') return '\u2717';
-  return '';
+  if (status === "Disetujui") return "\u2713";
+  if (status === "Tidak disetujui") return "\u2717";
+  return "";
 }
 
 function formatSuhuBarangForExport(it: {
@@ -96,12 +100,15 @@ function formatSuhuBarangForExport(it: {
 }) {
   const rec = it.recorded_temperature ?? it.item_temperature;
   const parts: string[] = [];
-  parts.push(rec != null && String(rec).trim() !== '' ? String(rec) : '-');
-  if (it.opname_temperature != null && String(it.opname_temperature).trim() !== '') {
+  parts.push(rec != null && String(rec).trim() !== "" ? String(rec) : "-");
+  if (
+    it.opname_temperature != null &&
+    String(it.opname_temperature).trim() !== ""
+  ) {
     parts.push(`Opname: ${it.opname_temperature}`);
   }
   if (it.temperature_match) parts.push(it.temperature_match);
-  return parts.join(' · ');
+  return parts.join(" · ");
 }
 
 function ValidatedFieldLabel({
@@ -114,7 +121,11 @@ function ValidatedFieldLabel({
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
       {validated ? (
-        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600" strokeWidth={2.5} aria-hidden />
+        <Check
+          className="h-3.5 w-3.5 shrink-0 text-emerald-600"
+          strokeWidth={2.5}
+          aria-hidden
+        />
       ) : null}
       <span>{label}</span>
     </span>
@@ -131,13 +142,17 @@ function DecisionButtonGroup({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex flex-wrap gap-2" role="group" aria-label="Keputusan validasi">
+    <div
+      className="flex flex-wrap gap-2"
+      role="group"
+      aria-label="Keputusan validasi"
+    >
       <Button
         type="button"
         size="sm"
-        variant={value === 'Disetujui' ? 'default' : 'outline'}
+        variant={value === "Disetujui" ? "default" : "outline"}
         className="gap-1.5"
-        onClick={() => onChange('Disetujui')}
+        onClick={() => onChange("Disetujui")}
         disabled={disabled}
       >
         <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
@@ -146,9 +161,9 @@ function DecisionButtonGroup({
       <Button
         type="button"
         size="sm"
-        variant={value === 'Tidak disetujui' ? 'destructive' : 'outline'}
+        variant={value === "Tidak disetujui" ? "destructive" : "outline"}
         className="gap-1.5"
-        onClick={() => onChange('Tidak disetujui')}
+        onClick={() => onChange("Tidak disetujui")}
         disabled={disabled}
       >
         <XCircle className="h-4 w-4 shrink-0" aria-hidden />
@@ -179,10 +194,10 @@ export default function StockOpname() {
     date_end: string;
     pending_validation: boolean;
   }>({
-    item_id: '',
-    officer_id: '',
-    date_start: '',
-    date_end: '',
+    item_id: "",
+    officer_id: "",
+    date_start: "",
+    date_end: "",
     pending_validation: false,
   });
 
@@ -191,10 +206,14 @@ export default function StockOpname() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [createItemId, setCreateItemId] = useState('');
-  const [createItemTemperature, setCreateItemTemperature] = useState<string>(''); // suhu barang (standar)
-  const [createOpnameTemperature, setCreateOpnameTemperature] = useState<string>(''); // suhu saat opname
-  const [createTemperatureMatch, setCreateTemperatureMatch] = useState<'Sesuai' | 'Tidak sesuai'>('Sesuai');
+  const [createItemId, setCreateItemId] = useState("");
+  const [createItemTemperature, setCreateItemTemperature] =
+    useState<string>(""); // suhu barang (standar)
+  const [createOpnameTemperature, setCreateOpnameTemperature] =
+    useState<string>(""); // suhu saat opname
+  const [createTemperatureMatch, setCreateTemperatureMatch] = useState<
+    "Sesuai" | "Tidak sesuai"
+  >("Sesuai");
   const [createLots, setCreateLots] = useState<CreateLotRow[]>([]);
 
   const [validateOpen, setValidateOpen] = useState(false);
@@ -203,7 +222,14 @@ export default function StockOpname() {
   const [validateSaving, setValidateSaving] = useState(false);
   const [validateDetail, setValidateDetail] = useState<any>(null);
   const [validateItemDecisions, setValidateItemDecisions] = useState<
-    Record<number, { temperature: ValidationChoice; stock?: ValidationChoice; expiration?: ValidationChoice }>
+    Record<
+      number,
+      {
+        temperature: ValidationChoice;
+        stock?: ValidationChoice;
+        expiration?: ValidationChoice;
+      }
+    >
   >({});
   const [validateLotDecisions, setValidateLotDecisions] = useState<
     Record<number, { stock: ValidationChoice; expiration: ValidationChoice }>
@@ -230,17 +256,19 @@ export default function StockOpname() {
   useEffect(() => {
     // load filter dropdown options (barang + petugas)
     api
-      .get('/items?status=Active')
+      .get("/items?status=Active")
       .then((res) => {
         const rows = Array.isArray(res.data) ? res.data : [];
         setItemsOptions(
           rows
             .map((r: any) => ({
               id: Number(r.id),
-              name: String(r.name ?? ''),
-              last_opname_date: r.last_opname_date ? String(r.last_opname_date) : null,
+              name: String(r.name ?? ""),
+              last_opname_date: r.last_opname_date
+                ? String(r.last_opname_date)
+                : null,
             }))
-            .filter((x: ItemOption) => Number.isFinite(x.id) && x.name)
+            .filter((x: ItemOption) => Number.isFinite(x.id) && x.name),
         );
       })
       .catch(() => {
@@ -253,7 +281,7 @@ export default function StockOpname() {
     if (filters.date_start) params.date_start = filters.date_start;
     if (filters.date_end) params.date_end = filters.date_end;
     api
-      .get('/stock-opnames/officers', { params })
+      .get("/stock-opnames/officers", { params })
       .then((res) => setOfficerOptions(Array.isArray(res.data) ? res.data : []))
       .catch(() => setOfficerOptions([]));
   }, [filters.date_start, filters.date_end]);
@@ -267,7 +295,7 @@ export default function StockOpname() {
       opacity: [0, 1],
       translateY: [20, 0],
       duration: 500,
-      easing: 'easeOutCubic',
+      easing: "easeOutCubic",
     });
     anime({
       targets: headerRef.current,
@@ -275,7 +303,7 @@ export default function StockOpname() {
       translateY: [12, 0],
       duration: 400,
       delay: 80,
-      easing: 'easeOutCubic',
+      easing: "easeOutCubic",
     });
     anime({
       targets: tableCardRef.current,
@@ -283,7 +311,7 @@ export default function StockOpname() {
       translateY: [12, 0],
       duration: 450,
       delay: 160,
-      easing: 'easeOutCubic',
+      easing: "easeOutCubic",
     });
   }, [reduceMotion]);
 
@@ -300,7 +328,7 @@ export default function StockOpname() {
       translateX: [-8, 0],
       duration: 350,
       delay: anime.stagger(40, { start: 200 }),
-      easing: 'easeOutCubic',
+      easing: "easeOutCubic",
     });
   }, [loading, opnameItems.length, reduceMotion]);
 
@@ -313,7 +341,7 @@ export default function StockOpname() {
     if (filters.officer_id) params.officer_id = filters.officer_id;
     if (filters.date_start) params.date_start = filters.date_start;
     if (filters.date_end) params.date_end = filters.date_end;
-    if (filters.pending_validation) params.pending_validation = 'true';
+    if (filters.pending_validation) params.pending_validation = "true";
     return params;
   }, [
     filters.date_end,
@@ -333,14 +361,16 @@ export default function StockOpname() {
       if (filters.officer_id) base.officer_id = filters.officer_id;
       if (filters.date_start) base.date_start = filters.date_start;
       if (filters.date_end) base.date_end = filters.date_end;
-      if (filters.pending_validation) base.pending_validation = 'true';
+      if (filters.pending_validation) base.pending_validation = "true";
 
       const all: any[] = [];
       let page = 1;
       const limit = 100;
       let totalPages = 1;
       do {
-        const res = await api.get('/stock-opnames/items', { params: { ...base, page, limit } });
+        const res = await api.get("/stock-opnames/items", {
+          params: { ...base, page, limit },
+        });
         const chunk = res.data?.data;
         const pag = res.data?.pagination;
         if (Array.isArray(chunk)) all.push(...chunk);
@@ -349,34 +379,34 @@ export default function StockOpname() {
       } while (page <= totalPages);
 
       if (all.length === 0) {
-        toast({ variant: 'error', title: 'Tidak ada data untuk diekspor' });
+        toast({ variant: "error", title: "Tidak ada data untuk diekspor" });
         return;
       }
 
       const headers = [
-        'Tanggal',
-        'Petugas',
-        'Suhu barang',
-        'Hasil validasi suhu oleh admin',
-        'Barang',
-        'Lot barang',
-        'Stok tercatat',
-        'Stok opname',
-        'Hasil validasi stok oleh admin',
-        'Kadaluarsa tercatat',
-        'Kadaluarsa opname',
-        'Hasil validasi kadaluarsa oleh admin',
+        "Tanggal",
+        "Petugas",
+        "Suhu barang",
+        "Hasil validasi suhu",
+        "Barang",
+        "Lot barang",
+        "Stok tercatat",
+        "Stok opname",
+        "Hasil validasi stok",
+        "Kadaluarsa tercatat",
+        "Kadaluarsa opname",
+        "Hasil validasi kadaluarsa",
       ];
 
       const dataRows: (string | number)[][] = [];
       for (const it of all) {
         const tanggal = it.opname_date
           ? formatDdMmYyyyFromDateOnly(String(it.opname_date).slice(0, 10))
-          : '-';
-        const petugas = it.officer_name != null ? String(it.officer_name) : '-';
+          : "-";
+        const petugas = it.officer_name != null ? String(it.officer_name) : "-";
         const suhu = formatSuhuBarangForExport(it);
         const valSuhu = adminValidationSymbol(it.temperature_validation_status);
-        const barang = it.item_name != null ? String(it.item_name) : '-';
+        const barang = it.item_name != null ? String(it.item_name) : "-";
         const lots = Array.isArray(it.lots) ? it.lots : [];
         if (lots.length === 0) {
           dataRows.push([
@@ -385,12 +415,12 @@ export default function StockOpname() {
             suhu,
             valSuhu,
             barang,
-            '-',
-            it.recorded_stock ?? '',
-            it.opname_stock ?? '',
+            "-",
+            it.recorded_stock ?? "",
+            it.opname_stock ?? "",
             adminValidationSymbol(it.stock_validation_status),
             formatDdMmYyyyFromDateOnly(it.recorded_expiration),
-            '-',
+            "-",
             adminValidationSymbol(it.expiration_validation_status),
           ]);
         } else {
@@ -401,9 +431,9 @@ export default function StockOpname() {
               suhu,
               valSuhu,
               barang,
-              l.lot_number != null ? String(l.lot_number) : '-',
-              l.recorded_lot_stock ?? '',
-              l.opname_lot_stock ?? '',
+              l.lot_number != null ? String(l.lot_number) : "-",
+              l.recorded_lot_stock ?? "",
+              l.opname_lot_stock ?? "",
               adminValidationSymbol(l.stock_validation_status),
               formatDdMmYyyyFromDateOnly(l.recorded_expiration),
               formatDdMmYyyyFromDateOnly(l.opname_expiration),
@@ -416,31 +446,31 @@ export default function StockOpname() {
       const datePart = new Date().toISOString().slice(0, 10);
       const filename = `stock-opname_${datePart}.xlsx`;
 
-      const { Workbook } = await import('exceljs');
+      const { Workbook } = await import("exceljs");
       const wb = new Workbook();
-      const ws = wb.addWorksheet('Stock Opname');
+      const ws = wb.addWorksheet("Stock Opname");
       ws.addRow(headers);
       dataRows.forEach((r) => ws.addRow(r as any[]));
 
       const buffer = await wb.xlsx.writeBuffer();
       const blob = new Blob([buffer], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      toast({ variant: 'success', title: 'Ekspor Excel berhasil' });
+      toast({ variant: "success", title: "Ekspor Excel berhasil" });
     } catch (error) {
-      console.error('Export stock opname:', error);
+      console.error("Export stock opname:", error);
       toast({
-        variant: 'error',
-        title: 'Gagal mengekspor',
-        description: getErrorMessage(error, 'Gagal mengekspor ke Excel'),
+        variant: "error",
+        title: "Gagal mengekspor",
+        description: getErrorMessage(error, "Gagal mengekspor ke Excel"),
       });
     } finally {
       setExporting(false);
@@ -450,11 +480,11 @@ export default function StockOpname() {
   const fetchOpnameItems = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/stock-opnames/items', { params: listParams });
+      const res = await api.get("/stock-opnames/items", { params: listParams });
       const data = res.data?.data;
       const pag = res.data?.pagination;
       setOpnameItems(Array.isArray(data) ? data : []);
-      if (pag && typeof pag === 'object') {
+      if (pag && typeof pag === "object") {
         setPagination((prev) => ({
           ...prev,
           page: Number(pag.page ?? prev.page) || prev.page,
@@ -464,11 +494,11 @@ export default function StockOpname() {
         }));
       }
     } catch (error) {
-      console.error('Error fetching opname items:', error);
+      console.error("Error fetching opname items:", error);
       toast({
-        variant: 'error',
-        title: 'Gagal memuat data',
-        description: getErrorMessage(error, 'Gagal memuat data stock opname'),
+        variant: "error",
+        title: "Gagal memuat data",
+        description: getErrorMessage(error, "Gagal memuat data stock opname"),
       });
     } finally {
       setLoading(false);
@@ -477,10 +507,10 @@ export default function StockOpname() {
 
   const resetFilters = () => {
     setFilters({
-      item_id: '',
-      officer_id: '',
-      date_start: '',
-      date_end: '',
+      item_id: "",
+      officer_id: "",
+      date_start: "",
+      date_end: "",
       pending_validation: false,
     });
     setPagination((p) => ({ ...p, page: 1 }));
@@ -498,20 +528,31 @@ export default function StockOpname() {
       const d = res.data;
       setValidateDetail(d);
       const idItems: Record<number, { temperature: ValidationChoice }> = {};
-      const idLots: Record<number, { stock: ValidationChoice; expiration: ValidationChoice }> = {};
+      const idLots: Record<
+        number,
+        { stock: ValidationChoice; expiration: ValidationChoice }
+      > = {};
       for (const row of d?.items ?? []) {
-        const base: { temperature: ValidationChoice; stock?: ValidationChoice; expiration?: ValidationChoice } = {
-          temperature: (row.temperature_validation_status as ValidationChoice) ?? 'Belum',
+        const base: {
+          temperature: ValidationChoice;
+          stock?: ValidationChoice;
+          expiration?: ValidationChoice;
+        } = {
+          temperature:
+            (row.temperature_validation_status as ValidationChoice) ?? "Belum",
         };
         if (!Array.isArray(row.lots) || row.lots.length === 0) {
-          base.stock = (row.stock_validation_status as ValidationChoice) ?? 'Belum';
-          base.expiration = (row.expiration_validation_status as ValidationChoice) ?? 'Belum';
+          base.stock =
+            (row.stock_validation_status as ValidationChoice) ?? "Belum";
+          base.expiration =
+            (row.expiration_validation_status as ValidationChoice) ?? "Belum";
         }
         idItems[row.id] = base;
         for (const lot of row.lots ?? []) {
           idLots[lot.id] = {
-            stock: (lot.stock_validation_status as ValidationChoice) ?? 'Belum',
-            expiration: (lot.expiration_validation_status as ValidationChoice) ?? 'Belum',
+            stock: (lot.stock_validation_status as ValidationChoice) ?? "Belum",
+            expiration:
+              (lot.expiration_validation_status as ValidationChoice) ?? "Belum",
           };
         }
       }
@@ -519,9 +560,12 @@ export default function StockOpname() {
       setValidateLotDecisions(idLots);
     } catch (error) {
       toast({
-        variant: 'error',
-        title: 'Gagal memuat opname',
-        description: getErrorMessage(error, 'Tidak dapat memuat detail stock opname'),
+        variant: "error",
+        title: "Gagal memuat opname",
+        description: getErrorMessage(
+          error,
+          "Tidak dapat memuat detail stock opname",
+        ),
       });
       setValidateOpen(false);
     } finally {
@@ -539,7 +583,8 @@ export default function StockOpname() {
           temperature_validation_status: v.temperature,
         };
         if (v.stock !== undefined) o.stock_validation_status = v.stock;
-        if (v.expiration !== undefined) o.expiration_validation_status = v.expiration;
+        if (v.expiration !== undefined)
+          o.expiration_validation_status = v.expiration;
         return o;
       });
       const lots = Object.entries(validateLotDecisions).map(([lid, v]) => ({
@@ -547,15 +592,18 @@ export default function StockOpname() {
         stock_validation_status: v.stock,
         expiration_validation_status: v.expiration,
       }));
-      await api.patch(`/stock-opnames/${validateOpnameId}/validate`, { items, lots });
-      toast({ variant: 'success', title: 'Validasi disimpan' });
+      await api.patch(`/stock-opnames/${validateOpnameId}/validate`, {
+        items,
+        lots,
+      });
+      toast({ variant: "success", title: "Validasi disimpan" });
       setValidateOpen(false);
       await fetchOpnameItems();
     } catch (error) {
       toast({
-        variant: 'error',
-        title: 'Gagal menyimpan validasi',
-        description: getErrorMessage(error, 'Validasi gagal'),
+        variant: "error",
+        title: "Gagal menyimpan validasi",
+        description: getErrorMessage(error, "Validasi gagal"),
       });
     } finally {
       setValidateSaving(false);
@@ -564,47 +612,57 @@ export default function StockOpname() {
 
   const openCreate = () => {
     setCreateOpen(true);
-    setCreateItemId('');
-    setCreateItemTemperature('');
-    setCreateOpnameTemperature('');
-    setCreateTemperatureMatch('Sesuai');
+    setCreateItemId("");
+    setCreateItemTemperature("");
+    setCreateOpnameTemperature("");
+    setCreateTemperatureMatch("Sesuai");
     setCreateLots([]);
   };
 
   const loadLotsForCreateItem = async (itemId: string) => {
     setCreateItemId(itemId);
-    setCreateItemTemperature('');
-    setCreateOpnameTemperature('');
-    setCreateTemperatureMatch('Sesuai');
+    setCreateItemTemperature("");
+    setCreateOpnameTemperature("");
+    setCreateTemperatureMatch("Sesuai");
     setCreateLots([]);
     const idNum = Number(itemId);
     if (!Number.isFinite(idNum)) return;
     try {
       const res = await api.get(`/items/${idNum}`);
-      setCreateItemTemperature(res.data?.temperature ? String(res.data.temperature) : '');
+      setCreateItemTemperature(
+        res.data?.temperature ? String(res.data.temperature) : "",
+      );
       const lotsRes = await api.get(`/items/${idNum}/lots`);
       const lots = Array.isArray(lotsRes.data) ? lotsRes.data : [];
       setCreateLots(
         lots.map((l: any) => {
-          const recordedExpiration = l.expiration_date ? String(l.expiration_date) : null;
+          const recordedExpiration = l.expiration_date
+            ? String(l.expiration_date)
+            : null;
           const recordedStock = Number(l.stock ?? 0);
           return {
             lot_id: Number(l.id),
-            lot_number: String(l.lot_number ?? ''),
-            recorded_lot_stock: Number.isFinite(recordedStock) ? recordedStock : 0,
+            lot_number: String(l.lot_number ?? ""),
+            recorded_lot_stock: Number.isFinite(recordedStock)
+              ? recordedStock
+              : 0,
             recorded_expiration: recordedExpiration,
             selected: false,
-            opname_lot_stock: String(Number.isFinite(recordedStock) ? recordedStock : 0),
-            opname_expiration: recordedExpiration ? normalizeDate(recordedExpiration) ?? '' : '',
+            opname_lot_stock: String(
+              Number.isFinite(recordedStock) ? recordedStock : 0,
+            ),
+            opname_expiration: recordedExpiration
+              ? (normalizeDate(recordedExpiration) ?? "")
+              : "",
             in_pending_opname: Boolean(l.in_pending_opname),
           };
-        })
+        }),
       );
     } catch (error) {
       toast({
-        variant: 'error',
-        title: 'Gagal memuat lot',
-        description: getErrorMessage(error, 'Gagal memuat lot barang'),
+        variant: "error",
+        title: "Gagal memuat lot",
+        description: getErrorMessage(error, "Gagal memuat lot barang"),
       });
     }
   };
@@ -615,7 +673,11 @@ export default function StockOpname() {
     if (selected.length === 0) return false;
     for (const l of selected) {
       if (l.in_pending_opname) return false;
-      if (l.opname_lot_stock === '' || !Number.isFinite(Number(l.opname_lot_stock))) return false;
+      if (
+        l.opname_lot_stock === "" ||
+        !Number.isFinite(Number(l.opname_lot_stock))
+      )
+        return false;
       if (Number(l.opname_lot_stock) < 0) return false;
     }
     return true;
@@ -632,27 +694,31 @@ export default function StockOpname() {
             item_id: Number(createItemId),
             recorded_temperature: createItemTemperature || null,
             opname_temperature:
-              createTemperatureMatch === 'Tidak sesuai' ? createOpnameTemperature || null : null,
+              createTemperatureMatch === "Tidak sesuai"
+                ? createOpnameTemperature || null
+                : null,
             temperature_match: createTemperatureMatch,
             lots: selectedLots.map((l) => ({
               lot_id: l.lot_id,
               opname_lot_stock: Number(l.opname_lot_stock || 0),
-              opname_expiration: l.opname_expiration ? l.opname_expiration : null,
+              opname_expiration: l.opname_expiration
+                ? l.opname_expiration
+                : null,
             })),
           },
         ],
       };
 
-      await api.post('/stock-opnames', payload);
+      await api.post("/stock-opnames", payload);
       setCreateOpen(false);
-      toast({ variant: 'success', title: 'Stock opname berhasil dibuat' });
+      toast({ variant: "success", title: "Stock opname berhasil dibuat" });
       setPagination((p) => ({ ...p, page: 1 }));
       await fetchOpnameItems();
     } catch (error) {
       toast({
-        variant: 'error',
-        title: 'Gagal membuat stock opname',
-        description: getErrorMessage(error, 'Gagal membuat stock opname'),
+        variant: "error",
+        title: "Gagal membuat stock opname",
+        description: getErrorMessage(error, "Gagal membuat stock opname"),
       });
     } finally {
       setCreating(false);
@@ -671,7 +737,9 @@ export default function StockOpname() {
         <div className="space-y-5">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm font-medium text-foreground">Barang</label>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Barang
+              </label>
               <select
                 value={createItemId}
                 onChange={(e) => void loadLotsForCreateItem(e.target.value)}
@@ -683,17 +751,27 @@ export default function StockOpname() {
                 <option value="">Pilih barang...</option>
                 {itemsOptions.map((it) => (
                   <option key={it.id} value={String(it.id)}>
-                    {it.name} — Terakhir: {formatDdMmYyyyFromDateOnly(it.last_opname_date)}
+                    {it.name} — Terakhir:{" "}
+                    {formatDdMmYyyyFromDateOnly(it.last_opname_date)}
                   </option>
                 ))}
               </select>
             </div>
             <div className="flex items-end justify-end gap-2">
-              <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>
+              <Button
+                variant="outline"
+                onClick={() => setCreateOpen(false)}
+                disabled={creating}
+              >
                 Batal
               </Button>
-              <Button onClick={submitCreate} disabled={creating || !canSubmitCreate}>
-                {creating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden /> : null}
+              <Button
+                onClick={submitCreate}
+                disabled={creating || !canSubmitCreate}
+              >
+                {creating ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden />
+                ) : null}
                 Simpan
               </Button>
             </div>
@@ -702,22 +780,30 @@ export default function StockOpname() {
           {createItemId ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="rounded-xl border border-border bg-card p-4">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Suhu barang</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Suhu barang
+                </p>
                 <p className="mt-2 text-sm text-foreground">
-                  <span className="font-medium">{createItemTemperature || '-'}</span>
+                  <span className="font-medium">
+                    {createItemTemperature || "-"}
+                  </span>
                 </p>
               </div>
               <div className="md:col-span-2 rounded-xl border border-border bg-card p-4">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <div>
-                    <label className="mb-2 block text-sm font-medium text-foreground">Kesesuaian suhu</label>
+                    <label className="mb-2 block text-sm font-medium text-foreground">
+                      Kesesuaian suhu
+                    </label>
                     <select
                       value={createTemperatureMatch}
                       onChange={(e) => {
                         const next =
-                          e.target.value === 'Tidak sesuai' ? 'Tidak sesuai' : 'Sesuai';
+                          e.target.value === "Tidak sesuai"
+                            ? "Tidak sesuai"
+                            : "Sesuai";
                         setCreateTemperatureMatch(next);
-                        if (next === 'Sesuai') setCreateOpnameTemperature('');
+                        if (next === "Sesuai") setCreateOpnameTemperature("");
                       }}
                       className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={creating}
@@ -727,12 +813,16 @@ export default function StockOpname() {
                       <option value="Tidak sesuai">Tidak sesuai</option>
                     </select>
                   </div>
-                  {createTemperatureMatch === 'Tidak sesuai' ? (
+                  {createTemperatureMatch === "Tidak sesuai" ? (
                     <div>
-                      <label className="mb-2 block text-sm font-medium text-foreground">Suhu opname</label>
+                      <label className="mb-2 block text-sm font-medium text-foreground">
+                        Suhu opname
+                      </label>
                       <Input
                         value={createOpnameTemperature}
-                        onChange={(e) => setCreateOpnameTemperature(e.target.value)}
+                        onChange={(e) =>
+                          setCreateOpnameTemperature(e.target.value)
+                        }
                         placeholder="Contoh: 2-8°C"
                         disabled={creating}
                         aria-label="Suhu opname"
@@ -764,7 +854,10 @@ export default function StockOpname() {
                 </div>
                 <div className="divide-y divide-border">
                   {createLots.map((l) => (
-                    <div key={l.lot_id} className="grid grid-cols-12 gap-2 px-4 py-3 items-center">
+                    <div
+                      key={l.lot_id}
+                      className="grid grid-cols-12 gap-2 px-4 py-3 items-center"
+                    >
                       <div className="col-span-1">
                         <input
                           type="checkbox"
@@ -772,7 +865,11 @@ export default function StockOpname() {
                           onChange={(e) => {
                             const checked = e.target.checked;
                             setCreateLots((prev) =>
-                              prev.map((x) => (x.lot_id === l.lot_id ? { ...x, selected: checked } : x))
+                              prev.map((x) =>
+                                x.lot_id === l.lot_id
+                                  ? { ...x, selected: checked }
+                                  : x,
+                              ),
                             );
                           }}
                           className="h-4 w-4"
@@ -781,16 +878,24 @@ export default function StockOpname() {
                         />
                       </div>
                       <div className="col-span-3">
-                        <p className="text-sm font-medium text-foreground">{l.lot_number}</p>
+                        <p className="text-sm font-medium text-foreground">
+                          {l.lot_number}
+                        </p>
                         {l.in_pending_opname ? (
-                          <p className="text-xs text-amber-600 mt-0.5">Menunggu validasi admin</p>
+                          <p className="text-xs text-amber-600 mt-0.5">
+                            Menunggu validasi admin
+                          </p>
                         ) : null}
                       </div>
                       <div className="col-span-2">
-                        <p className="text-sm text-foreground">{l.recorded_lot_stock}</p>
+                        <p className="text-sm text-foreground">
+                          {l.recorded_lot_stock}
+                        </p>
                       </div>
                       <div className="col-span-3">
-                        <p className="text-sm text-foreground">{formatDateId(l.recorded_expiration)}</p>
+                        <p className="text-sm text-foreground">
+                          {formatDateId(l.recorded_expiration)}
+                        </p>
                       </div>
                       <div className="col-span-3 grid grid-cols-1 gap-2">
                         <Input
@@ -800,7 +905,11 @@ export default function StockOpname() {
                           onChange={(e) => {
                             const v = e.target.value;
                             setCreateLots((prev) =>
-                              prev.map((x) => (x.lot_id === l.lot_id ? { ...x, opname_lot_stock: v } : x))
+                              prev.map((x) =>
+                                x.lot_id === l.lot_id
+                                  ? { ...x, opname_lot_stock: v }
+                                  : x,
+                              ),
                             );
                           }}
                           disabled={creating || !l.selected}
@@ -812,7 +921,11 @@ export default function StockOpname() {
                           onChange={(e) => {
                             const v = e.target.value;
                             setCreateLots((prev) =>
-                              prev.map((x) => (x.lot_id === l.lot_id ? { ...x, opname_expiration: v } : x))
+                              prev.map((x) =>
+                                x.lot_id === l.lot_id
+                                  ? { ...x, opname_expiration: v }
+                                  : x,
+                              ),
                             );
                           }}
                           disabled={creating || !l.selected}
@@ -845,52 +958,73 @@ export default function StockOpname() {
         ) : validateDetail ? (
           <div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
             <p className="text-sm text-muted-foreground">
-              Opname #{validateDetail.id} •{' '}
+              Opname #{validateDetail.id} •{" "}
               {validateDetail.opname_date
-                ? new Date(validateDetail.opname_date).toLocaleDateString('id-ID')
-                : ''}{' '}
+                ? new Date(validateDetail.opname_date).toLocaleDateString(
+                    "id-ID",
+                  )
+                : ""}{" "}
               • {validateDetail.officer_name}
             </p>
             {(validateDetail.items ?? []).map((row: any) => (
-              <div key={row.id} className="rounded-xl border border-border bg-card p-4 space-y-4">
+              <div
+                key={row.id}
+                className="rounded-xl border border-border bg-card p-4 space-y-4"
+              >
                 <p className="font-medium text-foreground">{row.item_name}</p>
 
                 <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Suhu</p>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Suhu
+                  </p>
                   <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
                     <div>
-                      <span className="text-xs text-muted-foreground">Suhu barang</span>
+                      <span className="text-xs text-muted-foreground">
+                        Suhu barang
+                      </span>
                       <p className="font-medium text-foreground">
-                        {row.recorded_temperature ?? row.item_temperature ?? '-'}
+                        {row.recorded_temperature ??
+                          row.item_temperature ??
+                          "-"}
                       </p>
                     </div>
                     <div>
-                      <span className="text-xs text-muted-foreground">Suhu opname</span>
-                      <p className="font-medium text-foreground">{row.opname_temperature ?? '-'}</p>
+                      <span className="text-xs text-muted-foreground">
+                        Suhu opname
+                      </span>
+                      <p className="font-medium text-foreground">
+                        {row.opname_temperature ?? "-"}
+                      </p>
                     </div>
                     <div>
-                      <span className="text-xs text-muted-foreground">Keterangan opname</span>
+                      <span className="text-xs text-muted-foreground">
+                        Keterangan opname
+                      </span>
                       <p className="font-medium text-foreground">
                         {row.temperature_match ? (
                           <span
                             className={
-                              row.temperature_match === 'Sesuai'
-                                ? 'text-emerald-700'
-                                : 'text-rose-700'
+                              row.temperature_match === "Sesuai"
+                                ? "text-emerald-700"
+                                : "text-rose-700"
                             }
                           >
                             {row.temperature_match}
                           </span>
                         ) : (
-                          '-'
+                          "-"
                         )}
                       </p>
                     </div>
                   </div>
                   <div>
-                    <p className="mb-2 text-xs font-medium text-muted-foreground">Keputusan validasi suhu</p>
+                    <p className="mb-2 text-xs font-medium text-muted-foreground">
+                      Keputusan validasi suhu
+                    </p>
                     <DecisionButtonGroup
-                      value={validateItemDecisions[row.id]?.temperature ?? 'Belum'}
+                      value={
+                        validateItemDecisions[row.id]?.temperature ?? "Belum"
+                      }
                       onChange={(v) =>
                         setValidateItemDecisions((prev) => ({
                           ...prev,
@@ -904,35 +1038,62 @@ export default function StockOpname() {
 
                 {(row.lots ?? []).length > 0 ? (
                   <div className="space-y-3">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase">Per lot</p>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase">
+                      Per lot
+                    </p>
                     {(row.lots ?? []).map((lot: any) => (
-                      <div key={lot.id} className="rounded-lg border border-border bg-background p-4 space-y-4">
-                        <p className="text-sm font-medium text-foreground">{lot.lot_number}</p>
+                      <div
+                        key={lot.id}
+                        className="rounded-lg border border-border bg-background p-4 space-y-4"
+                      >
+                        <p className="text-sm font-medium text-foreground">
+                          {lot.lot_number}
+                        </p>
 
                         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                           <div className="space-y-2 rounded-md border border-border bg-card p-3">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase">Tercatat</p>
-                            <p className="text-sm">
-                              <span className="text-muted-foreground">Stock:</span>{' '}
-                              <span className="font-medium">{lot.recorded_lot_stock}</span>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">
+                              Tercatat
                             </p>
                             <p className="text-sm">
-                              <span className="text-muted-foreground">Kadaluarsa:</span>{' '}
+                              <span className="text-muted-foreground">
+                                Stock:
+                              </span>{" "}
                               <span className="font-medium">
-                                {formatDdMmYyyyFromDateOnly(lot.recorded_expiration)}
+                                {lot.recorded_lot_stock}
+                              </span>
+                            </p>
+                            <p className="text-sm">
+                              <span className="text-muted-foreground">
+                                Kadaluarsa:
+                              </span>{" "}
+                              <span className="font-medium">
+                                {formatDdMmYyyyFromDateOnly(
+                                  lot.recorded_expiration,
+                                )}
                               </span>
                             </p>
                           </div>
                           <div className="space-y-2 rounded-md border border-border bg-card p-3">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase">Opname</p>
-                            <p className="text-sm">
-                              <span className="text-muted-foreground">Stock:</span>{' '}
-                              <span className="font-medium">{lot.opname_lot_stock}</span>
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">
+                              Opname
                             </p>
                             <p className="text-sm">
-                              <span className="text-muted-foreground">Kadaluarsa:</span>{' '}
+                              <span className="text-muted-foreground">
+                                Stock:
+                              </span>{" "}
                               <span className="font-medium">
-                                {formatDdMmYyyyFromDateOnly(lot.opname_expiration)}
+                                {lot.opname_lot_stock}
+                              </span>
+                            </p>
+                            <p className="text-sm">
+                              <span className="text-muted-foreground">
+                                Kadaluarsa:
+                              </span>{" "}
+                              <span className="font-medium">
+                                {formatDdMmYyyyFromDateOnly(
+                                  lot.opname_expiration,
+                                )}
                               </span>
                             </p>
                           </div>
@@ -940,15 +1101,20 @@ export default function StockOpname() {
 
                         <div className="grid grid-cols-1 gap-4 border-t border-border pt-3 sm:grid-cols-2">
                           <div>
-                            <p className="mb-2 text-xs font-medium text-muted-foreground">Validasi stok</p>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Validasi stok
+                            </p>
                             <DecisionButtonGroup
-                              value={validateLotDecisions[lot.id]?.stock ?? 'Belum'}
+                              value={
+                                validateLotDecisions[lot.id]?.stock ?? "Belum"
+                              }
                               onChange={(v) =>
                                 setValidateLotDecisions((prev) => ({
                                   ...prev,
                                   [lot.id]: {
                                     stock: v,
-                                    expiration: prev[lot.id]?.expiration ?? 'Belum',
+                                    expiration:
+                                      prev[lot.id]?.expiration ?? "Belum",
                                   },
                                 }))
                               }
@@ -956,14 +1122,19 @@ export default function StockOpname() {
                             />
                           </div>
                           <div>
-                            <p className="mb-2 text-xs font-medium text-muted-foreground">Validasi kadaluarsa</p>
+                            <p className="mb-2 text-xs font-medium text-muted-foreground">
+                              Validasi kadaluarsa
+                            </p>
                             <DecisionButtonGroup
-                              value={validateLotDecisions[lot.id]?.expiration ?? 'Belum'}
+                              value={
+                                validateLotDecisions[lot.id]?.expiration ??
+                                "Belum"
+                              }
                               onChange={(v) =>
                                 setValidateLotDecisions((prev) => ({
                                   ...prev,
                                   [lot.id]: {
-                                    stock: prev[lot.id]?.stock ?? 'Belum',
+                                    stock: prev[lot.id]?.stock ?? "Belum",
                                     expiration: v,
                                   },
                                 }))
@@ -978,9 +1149,11 @@ export default function StockOpname() {
                 ) : (
                   <div className="grid grid-cols-1 gap-4 border-t border-border pt-4 md:grid-cols-2">
                     <div>
-                      <p className="mb-2 text-xs font-medium text-muted-foreground">Validasi stok</p>
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">
+                        Validasi stok
+                      </p>
                       <DecisionButtonGroup
-                        value={validateItemDecisions[row.id]?.stock ?? 'Belum'}
+                        value={validateItemDecisions[row.id]?.stock ?? "Belum"}
                         onChange={(v) =>
                           setValidateItemDecisions((prev) => ({
                             ...prev,
@@ -991,9 +1164,13 @@ export default function StockOpname() {
                       />
                     </div>
                     <div>
-                      <p className="mb-2 text-xs font-medium text-muted-foreground">Validasi kadaluarsa</p>
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">
+                        Validasi kadaluarsa
+                      </p>
                       <DecisionButtonGroup
-                        value={validateItemDecisions[row.id]?.expiration ?? 'Belum'}
+                        value={
+                          validateItemDecisions[row.id]?.expiration ?? "Belum"
+                        }
                         onChange={(v) =>
                           setValidateItemDecisions((prev) => ({
                             ...prev,
@@ -1008,11 +1185,17 @@ export default function StockOpname() {
               </div>
             ))}
             <div className="flex justify-end gap-2 pt-2 border-t border-border">
-              <Button variant="outline" onClick={() => setValidateOpen(false)} disabled={validateSaving}>
+              <Button
+                variant="outline"
+                onClick={() => setValidateOpen(false)}
+                disabled={validateSaving}
+              >
                 Tutup
               </Button>
               <Button onClick={submitValidate} disabled={validateSaving}>
-                {validateSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden /> : null}
+                {validateSaving ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden />
+                ) : null}
                 Simpan validasi
               </Button>
             </div>
@@ -1067,7 +1250,9 @@ export default function StockOpname() {
         <div className="p-5">
           <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
             <div className="md:col-span-3">
-              <label className="mb-2 block text-sm font-medium text-foreground">Filter barang</label>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Filter barang
+              </label>
               <select
                 value={filters.item_id}
                 onChange={(e) => {
@@ -1080,13 +1265,16 @@ export default function StockOpname() {
                 <option value="">Semua barang</option>
                 {itemsOptions.map((it) => (
                   <option key={it.id} value={String(it.id)}>
-                    {it.name} — Terakhir: {formatDdMmYyyyFromDateOnly(it.last_opname_date)}
+                    {it.name} — Terakhir:{" "}
+                    {formatDdMmYyyyFromDateOnly(it.last_opname_date)}
                   </option>
                 ))}
               </select>
             </div>
             <div className="md:col-span-3">
-              <label className="mb-2 block text-sm font-medium text-foreground">Filter petugas</label>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Filter petugas
+              </label>
               <select
                 value={filters.officer_id}
                 onChange={(e) => {
@@ -1105,7 +1293,9 @@ export default function StockOpname() {
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium text-foreground">Tanggal mulai</label>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Tanggal mulai
+              </label>
               <Input
                 type="date"
                 value={filters.date_start}
@@ -1117,7 +1307,9 @@ export default function StockOpname() {
               />
             </div>
             <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium text-foreground">Tanggal akhir</label>
+              <label className="mb-2 block text-sm font-medium text-foreground">
+                Tanggal akhir
+              </label>
               <Input
                 type="date"
                 value={filters.date_end}
@@ -1134,14 +1326,22 @@ export default function StockOpname() {
                   type="checkbox"
                   checked={filters.pending_validation}
                   onChange={(e) => {
-                    setFilters((p) => ({ ...p, pending_validation: e.target.checked }));
+                    setFilters((p) => ({
+                      ...p,
+                      pending_validation: e.target.checked,
+                    }));
                     setPagination((p) => ({ ...p, page: 1 }));
                   }}
                   className="h-4 w-4 rounded border-input"
                 />
                 Belum divalidasi
               </label>
-              <Button variant="outline" onClick={resetFilters} aria-label="Reset filter" className="w-full md:w-auto">
+              <Button
+                variant="outline"
+                onClick={resetFilters}
+                aria-label="Reset filter"
+                className="w-full md:w-auto"
+              >
                 Reset
               </Button>
             </div>
@@ -1156,12 +1356,18 @@ export default function StockOpname() {
             </div>
           ) : opnameItems.length === 0 ? (
             <div className="px-4 py-16 text-center">
-              <div className="flex flex-col items-center gap-3 text-muted-foreground" role="status" aria-live="polite">
+              <div
+                className="flex flex-col items-center gap-3 text-muted-foreground"
+                role="status"
+                aria-live="polite"
+              >
                 <div className="rounded-full bg-muted p-4">
                   <ClipboardList className="h-10 w-10 text-muted-foreground/60" />
                 </div>
                 <p className="font-medium">Belum ada data item opname</p>
-                <p className="text-sm">Klik &quot;Tambah Stock Opname&quot; untuk mulai</p>
+                <p className="text-sm">
+                  Klik &quot;Tambah Stock Opname&quot; untuk mulai
+                </p>
                 <Button variant="outline" onClick={openCreate} className="mt-2">
                   <Plus className="w-4 h-4 mr-2" aria-hidden />
                   Tambah Stock Opname
@@ -1183,15 +1389,17 @@ export default function StockOpname() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-foreground">{it.item_name}</p>
+                          <p className="text-sm font-semibold text-foreground">
+                            {it.item_name}
+                          </p>
                           {it.validation_status ? (
                             <span
                               className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                                it.validation_status === 'Selesai'
-                                  ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200'
-                                  : it.validation_status === 'Belum'
-                                    ? 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'
-                                    : 'bg-muted text-muted-foreground'
+                                it.validation_status === "Selesai"
+                                  ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
+                                  : it.validation_status === "Belum"
+                                    ? "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
+                                    : "bg-muted text-muted-foreground"
                               }`}
                             >
                               {it.validation_status}
@@ -1201,36 +1409,55 @@ export default function StockOpname() {
                         <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
                           <span className="flex items-center gap-2">
                             <Calendar className="h-4 w-4" aria-hidden />
-                            <strong className="text-foreground">Tanggal:</strong>{' '}
+                            <strong className="text-foreground">
+                              Tanggal:
+                            </strong>{" "}
                             {it.opname_date
-                              ? new Date(it.opname_date).toLocaleDateString('id-ID', {
-                                  day: 'numeric',
-                                  month: 'long',
-                                  year: 'numeric',
-                                })
-                              : '-'}
+                              ? new Date(it.opname_date).toLocaleDateString(
+                                  "id-ID",
+                                  {
+                                    day: "numeric",
+                                    month: "long",
+                                    year: "numeric",
+                                  },
+                                )
+                              : "-"}
                           </span>
                           <span className="flex items-center gap-2">
                             <User className="h-4 w-4" aria-hidden />
-                            <strong className="text-foreground">Petugas:</strong> {it.officer_name ?? '-'}
+                            <strong className="text-foreground">
+                              Petugas:
+                            </strong>{" "}
+                            {it.officer_name ?? "-"}
                           </span>
                           <span>
-                            <strong className="text-foreground">Suhu barang:</strong> {it.recorded_temperature || '-'}
-                            {it.temperature_match === 'Tidak sesuai' ? (
+                            <strong className="text-foreground">
+                              Suhu barang:
+                            </strong>{" "}
+                            {it.recorded_temperature || "-"}
+                            {it.temperature_match === "Tidak sesuai" ? (
                               <span className="ml-2 text-muted-foreground">
-                                (<span className="text-foreground">{it.opname_temperature || '-'}</span>)
+                                (
+                                <span className="text-foreground">
+                                  {it.opname_temperature || "-"}
+                                </span>
+                                )
                               </span>
                             ) : it.opname_temperature ? (
                               <span className="ml-2 text-muted-foreground">
-                                (<span className="text-foreground">{it.opname_temperature}</span>)
+                                (
+                                <span className="text-foreground">
+                                  {it.opname_temperature}
+                                </span>
+                                )
                               </span>
                             ) : null}
                             {it.temperature_match ? (
                               <span
                                 className={`ml-2 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                                  it.temperature_match === 'Sesuai'
-                                    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                                    : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                                  it.temperature_match === "Sesuai"
+                                    ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                                    : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
                                 }`}
                               >
                                 {it.temperature_match}
@@ -1240,17 +1467,23 @@ export default function StockOpname() {
                           <span className="flex flex-wrap items-center gap-3 border-t border-border/60 pt-1 mt-1">
                             <ValidatedFieldLabel
                               label="Validasi suhu"
-                              validated={isValidated(it.temperature_validation_status)}
+                              validated={isValidated(
+                                it.temperature_validation_status,
+                              )}
                             />
                           </span>
                         </div>
                       </div>
-                      {user?.role === 'Admin' && it.validation_status === 'Belum' && it.stock_opname_id ? (
+                      {user?.role === "Admin" &&
+                      it.validation_status === "Belum" &&
+                      it.stock_opname_id ? (
                         <Button
                           type="button"
                           size="sm"
                           variant="outline"
-                          onClick={() => openValidate(Number(it.stock_opname_id))}
+                          onClick={() =>
+                            openValidate(Number(it.stock_opname_id))
+                          }
                         >
                           Validasi
                         </Button>
@@ -1260,16 +1493,25 @@ export default function StockOpname() {
 
                   <div className="p-4">
                     {!Array.isArray(it.lots) || it.lots.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-10 text-muted-foreground" role="status">
-                        <Package className="h-10 w-10 mb-2 opacity-50" aria-hidden />
+                      <div
+                        className="flex flex-col items-center justify-center py-10 text-muted-foreground"
+                        role="status"
+                      >
+                        <Package
+                          className="h-10 w-10 mb-2 opacity-50"
+                          aria-hidden
+                        />
                         <p className="font-medium">Belum ada lot</p>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                         {it.lots.map((l: LotRow) => {
-                          const expMatch = normalizeDate(l.recorded_expiration) === normalizeDate(l.opname_expiration);
+                          const expMatch =
+                            normalizeDate(l.recorded_expiration) ===
+                            normalizeDate(l.opname_expiration);
                           const stockMatch =
-                            Number(l.recorded_lot_stock ?? 0) === Number(l.opname_lot_stock ?? 0);
+                            Number(l.recorded_lot_stock ?? 0) ===
+                            Number(l.opname_lot_stock ?? 0);
 
                           return (
                             <div
@@ -1279,34 +1521,42 @@ export default function StockOpname() {
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div>
-                                  <p className="text-sm font-semibold text-foreground">{l.lot_number}</p>
+                                  <p className="text-sm font-semibold text-foreground">
+                                    {l.lot_number}
+                                  </p>
                                   <div className="mt-1 flex flex-wrap gap-1.5">
                                     <span
                                       className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium leading-none ${
                                         expMatch
-                                          ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                                          : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                                          : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
                                       }`}
                                     >
-                                      Kadaluarsa: {expMatch ? 'Sesuai' : 'Tidak sesuai'}
+                                      Kadaluarsa:{" "}
+                                      {expMatch ? "Sesuai" : "Tidak sesuai"}
                                     </span>
                                     <span
                                       className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium leading-none ${
                                         stockMatch
-                                          ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-                                          : 'bg-rose-50 text-rose-700 ring-1 ring-rose-200'
+                                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                                          : "bg-rose-50 text-rose-700 ring-1 ring-rose-200"
                                       }`}
                                     >
-                                      Jumlah stock: {stockMatch ? 'Sesuai' : 'Tidak sesuai'}
+                                      Jumlah stock:{" "}
+                                      {stockMatch ? "Sesuai" : "Tidak sesuai"}
                                     </span>
                                     <span className="flex flex-wrap gap-3 border-t border-border/50 pt-1 mt-1">
                                       <ValidatedFieldLabel
                                         label="Validasi stok (admin)"
-                                        validated={isValidated(l.stock_validation_status)}
+                                        validated={isValidated(
+                                          l.stock_validation_status,
+                                        )}
                                       />
                                       <ValidatedFieldLabel
                                         label="Validasi kadaluarsa (admin)"
-                                        validated={isValidated(l.expiration_validation_status)}
+                                        validated={isValidated(
+                                          l.expiration_validation_status,
+                                        )}
                                       />
                                     </span>
                                   </div>
@@ -1319,13 +1569,21 @@ export default function StockOpname() {
                                     Tercatat
                                   </p>
                                   <p className="mt-1 text-[13px] leading-snug text-foreground">
-                                    <span className="text-muted-foreground">Stock:</span>{' '}
-                                    <span className="font-medium">{l.recorded_lot_stock}</span>
+                                    <span className="text-muted-foreground">
+                                      Stock:
+                                    </span>{" "}
+                                    <span className="font-medium">
+                                      {l.recorded_lot_stock}
+                                    </span>
                                   </p>
                                   <p className="mt-0.5 text-[13px] leading-snug text-foreground">
-                                    <span className="text-muted-foreground">Kadaluarsa:</span>{' '}
+                                    <span className="text-muted-foreground">
+                                      Kadaluarsa:
+                                    </span>{" "}
                                     <span className="font-medium">
-                                      {formatDdMmYyyyFromDateOnly(l.recorded_expiration)}
+                                      {formatDdMmYyyyFromDateOnly(
+                                        l.recorded_expiration,
+                                      )}
                                     </span>
                                   </p>
                                 </div>
@@ -1334,13 +1592,21 @@ export default function StockOpname() {
                                     Opname
                                   </p>
                                   <p className="mt-1 text-[13px] leading-snug text-foreground">
-                                    <span className="text-muted-foreground">Stock:</span>{' '}
-                                    <span className="font-medium">{l.opname_lot_stock}</span>
+                                    <span className="text-muted-foreground">
+                                      Stock:
+                                    </span>{" "}
+                                    <span className="font-medium">
+                                      {l.opname_lot_stock}
+                                    </span>
                                   </p>
                                   <p className="mt-0.5 text-[13px] leading-snug text-foreground">
-                                    <span className="text-muted-foreground">Kadaluarsa:</span>{' '}
+                                    <span className="text-muted-foreground">
+                                      Kadaluarsa:
+                                    </span>{" "}
                                     <span className="font-medium">
-                                      {formatDdMmYyyyFromDateOnly(l.opname_expiration)}
+                                      {formatDdMmYyyyFromDateOnly(
+                                        l.opname_expiration,
+                                      )}
                                     </span>
                                   </p>
                                 </div>
@@ -1356,15 +1622,30 @@ export default function StockOpname() {
 
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
                 <p className="text-sm text-muted-foreground">
-                  Menampilkan halaman <span className="font-medium text-foreground">{pagination.page}</span> dari{' '}
-                  <span className="font-medium text-foreground">{pagination.total_pages}</span> • Total{' '}
-                  <span className="font-medium text-foreground">{pagination.total}</span> item
+                  Menampilkan halaman{" "}
+                  <span className="font-medium text-foreground">
+                    {pagination.page}
+                  </span>{" "}
+                  dari{" "}
+                  <span className="font-medium text-foreground">
+                    {pagination.total_pages}
+                  </span>{" "}
+                  • Total{" "}
+                  <span className="font-medium text-foreground">
+                    {pagination.total}
+                  </span>{" "}
+                  item
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setPagination((p) => ({ ...p, page: Math.max(1, p.page - 1) }))}
+                    onClick={() =>
+                      setPagination((p) => ({
+                        ...p,
+                        page: Math.max(1, p.page - 1),
+                      }))
+                    }
                     disabled={loading || pagination.page <= 1}
                     aria-label="Halaman sebelumnya"
                   >
@@ -1374,9 +1655,14 @@ export default function StockOpname() {
                     variant="outline"
                     size="sm"
                     onClick={() =>
-                      setPagination((p) => ({ ...p, page: Math.min(p.total_pages, p.page + 1) }))
+                      setPagination((p) => ({
+                        ...p,
+                        page: Math.min(p.total_pages, p.page + 1),
+                      }))
                     }
-                    disabled={loading || pagination.page >= pagination.total_pages}
+                    disabled={
+                      loading || pagination.page >= pagination.total_pages
+                    }
                     aria-label="Halaman berikutnya"
                   >
                     Next

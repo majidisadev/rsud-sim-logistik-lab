@@ -6,6 +6,14 @@ import { isNullableHttpUrl } from "../utils/imageUrl";
 
 const router = express.Router();
 
+const DEFAULT_TEMPERATURE = "not specified";
+
+function normalizeTemperature(input: any): string {
+  if (typeof input !== "string") return DEFAULT_TEMPERATURE;
+  const t = input.trim();
+  return t === "" ? DEFAULT_TEMPERATURE : t;
+}
+
 // Helper function to calculate item expiration from lots
 async function getItemExpiration(itemId: number): Promise<Date | null> {
   const result = await pool.query(
@@ -259,7 +267,7 @@ router.post("/", requireRole("Admin", "PJ Gudang"), async (req, res) => {
           description || null,
           category_id || null,
           unit || null,
-          temperature || null,
+          normalizeTemperature(temperature),
           min_stock || 1,
           image || null,
         ]
@@ -458,7 +466,7 @@ router.post("/import", requireRole("Admin", "PJ Gudang"), async (req, res) => {
             null, // description
             null, // category_id
             null, // unit
-            null, // temperature
+            DEFAULT_TEMPERATURE, // temperature
             1, // min_stock (default)
             null, // image
           ]
@@ -558,7 +566,7 @@ router.put("/:id", requireRole("Admin", "PJ Gudang"), async (req, res) => {
 
     if (temperature !== undefined) {
       updateFields.push(`temperature = $${paramCount++}`);
-      values.push(temperature);
+      values.push(normalizeTemperature(temperature));
     }
 
     if (min_stock !== undefined) {
